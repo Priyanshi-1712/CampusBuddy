@@ -2,7 +2,7 @@
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
 opencv-python-headless==4.9.0.80
-numpy==1.26.4   ✅ ADD THIS LINE
+numpy==1.26.4   
 
 # --- Database & Models ---
 sqlalchemy==2.0.25
