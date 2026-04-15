@@ -13,11 +13,20 @@ alembic==1.13.1
 # --- Security & Authentication ---
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
-python-multipart==0.0.6
+python-multipart==0.0.9
+bcrypt==4.1.2
 
 # --- Real-time & Communication ---
 websockets==12.0
 httpx==0.26.0
+fastapi-mail==1.4.1
+
+# --- AI & Image Processing ---
+easyocr==1.7.1
+torch==2.2.0
+torchvision==0.17.0
+pymupdf==1.23.22
+Pillow==10.2.0
 
 # --- Payments & Integration ---
 razorpay==1.4.1
@@ -26,3 +35,4 @@ python-dotenv==1.0.1
 # --- Utilities ---
 pydantic-settings==2.1.0
 emails==0.6
+python-slugify==8.0.4
