@@ -1,115 +1,248 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Lock, Mail, ArrowRight, ShieldCheck, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 const Login = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [showOtp, setShowOtp] = useState(false);
   const [otp, setOtp] = useState(["", "", "", ""]);
+  const [loading, setLoading] = useState(false);
 
-  const requestOtp = async () => {
+  const [resendDisabled, setResendDisabled] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+
+  const inputRefs = [useRef(), useRef(), useRef(), useRef()];
+
+  // Countdown timer for resend OTP
+  useEffect(() => {
+    let timer;
+    if (countdown > 0) {
+      timer = setInterval(() => setCountdown(prev => prev - 1), 1000);
+    } else {
+      setResendDisabled(false);
+    }
+    return () => clearInterval(timer);
+  }, [countdown]);
+
+  // Step 1: Verify email + password & send OTP
+  const requestOtp = async (e) => {
+    if (e) e.preventDefault();
+
+    if (!email || !password) {
+      toast.warning("Please enter both email and password.");
+      return;
+    }
+
+    setLoading(true);
+
     try {
       const res = await fetch("http://127.0.0.1:8000/api/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email })
-      });
-
-      if (res.ok) {
-        setShowOtp(true); // This shows the 4-digit input boxes
-      } else {
-        const errorData = await res.json();
-        alert(errorData.detail); // This will show "Account not found..." from Python
-      }
-    } catch (err) {
-      alert("Backend is not running!");
-    }
-  };
-
-  // Inside Login.jsx
-
-  const verifyLogin = async () => {
-    // Combine the 4 separate boxes into one string "1234"
-    const finalOtp = otp.join("");
-
-    if (finalOtp.length < 4) {
-      alert("Please enter all 4 digits");
-      return;
-    }
-
-    try {
-      const res = await fetch("http://127.0.0.1:8000/api/auth/verify-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: email,
-          otp: finalOtp
-        })
+        body: JSON.stringify({ email, password })
       });
 
       const data = await res.json();
 
       if (res.ok) {
-        alert("Login Successful!");
-        localStorage.setItem("userEmail", email);
-        localStorage.setItem("userName", data.username);
-        navigate("/marketplace");
+        toast.success("Credentials verified! OTP sent.");
+        setShowOtp(true);
+        setResendDisabled(true);
+        setCountdown(60);
       } else {
-        alert(data.detail || "Invalid OTP");
+        toast.error(data.detail || "Invalid credentials.");
       }
+
     } catch (err) {
-      console.error("Login Error:", err);
-      alert("Connection to server failed.");
+      toast.error("Server connection failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Step 2: Verify OTP & Login
+  const verifyLogin = async () => {
+    const finalOtp = otp.join("");
+
+    if (finalOtp.length < 4) {
+      toast.warning("Please enter the full 4-digit code.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, otp: finalOtp })
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.status === "success") {
+
+        // ✅ Properly structured user object
+        const userObject = {
+          username: data.username,
+          college_email: data.email
+        };
+
+        // ✅ Store everything correctly
+        localStorage.setItem("user", JSON.stringify(userObject));
+        localStorage.setItem("userEmail", data.email);
+        localStorage.setItem("userName", data.username);
+
+        toast.success(`Welcome back, ${data.username}!`);
+        navigate("/marketplace");
+
+      } else {
+        toast.error(data.detail || "Invalid or expired OTP.");
+      }
+
+    } catch (err) {
+      toast.error("Verification failed. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOTP = async () => {
+    setResendDisabled(true);
+    setCountdown(60);
+
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+
+      if (res.ok) {
+        toast.success("A new OTP has been sent.");
+      } else {
+        toast.error("Failed to resend OTP.");
+      }
+
+    } catch (err) {
+      toast.error("Error connecting to server.");
+    }
+  };
+
+  const handleOtpChange = (value, index) => {
+    if (isNaN(value)) return;
+
+    const newOtp = [...otp];
+    newOtp[index] = value.substring(value.length - 1);
+    setOtp(newOtp);
+
+    if (value && index < 3) {
+      inputRefs[index + 1].current.focus();
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-      <div className="bg-white w-full max-w-[400px] rounded-[2.5rem] shadow-2xl p-10 border border-slate-100">
-        <h2 className="text-2xl font-black text-slate-800 text-center mb-8">{showOtp ? "Verify" : "Login"}</h2>
+    <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-6">
+      <div className="bg-white w-full max-w-[440px] rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-10 border border-slate-100">
+
+        <div className="text-center mb-10">
+          <div className="w-16 h-16 bg-blue-600 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg shadow-blue-200">
+            <ShieldCheck className="text-white" size={32} />
+          </div>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight">
+            {showOtp ? "Verify OTP" : "Welcome Back"}
+          </h2>
+          <p className="text-slate-500 mt-2 text-sm font-medium">
+            {showOtp ? "Check your college email for the code" : "Log in to access your campus community"}
+          </p>
+        </div>
 
         {!showOtp ? (
-          <div className="space-y-4">
-            <input
-              type="email"
-              placeholder="name@poornima.edu.in"
-              className="w-full bg-slate-50 p-4 rounded-2xl outline-none border-2 border-transparent focus:border-blue-500"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-            />
-            <button onClick={requestOtp} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold">Send OTP →</button>
-            <p className="text-center text-sm text-slate-500 mt-4">New student? <span onClick={() => navigate("/signup")} className="text-blue-600 font-bold cursor-pointer">Sign Up</span></p>
-          </div>
+          <form onSubmit={requestOtp} className="space-y-5">
+
+            <div className="relative group">
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-all" size={20} />
+              <input
+                type="email"
+                placeholder="College Email"
+                className="w-full bg-slate-50 pl-12 pr-4 py-4 rounded-2xl outline-none border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="relative group">
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-all" size={20} />
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                className="w-full bg-slate-50 pl-12 pr-12 py-4 rounded-2xl outline-none border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-600 transition-colors"
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg"
+            >
+              {loading ? "Verifying..." : "Continue"} <ArrowRight size={20} />
+            </button>
+
+          </form>
         ) : (
-          <div className="space-y-6">
-            <div className="flex justify-between gap-2">
-              {otp.map((d, i) => (
+          <div className="space-y-8">
+
+            <div className="flex justify-between gap-3">
+              {otp.map((digit, i) => (
                 <input
                   key={i}
+                  ref={inputRefs[i]}
                   type="text"
                   maxLength="1"
-                  className="w-14 h-14 text-center text-xl font-bold bg-slate-50 rounded-xl border-2 border-slate-100 outline-none"
-                  onChange={e => {
-                    let next = [...otp];
-                    next[i] = e.target.value;
-                    setOtp(next);
-                  }}
+                  className="w-16 h-16 text-center text-2xl font-black bg-slate-50 rounded-2xl border-2 border-slate-300 focus:border-blue-600 outline-none"
+                  value={digit}
+                  onChange={e => handleOtpChange(e.target.value, i)}
                 />
               ))}
             </div>
+
             <button
-              type="button"
               onClick={verifyLogin}
-              className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-blue-700 transition"
+              disabled={loading}
+              className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold"
             >
-              Verify & Login
+              {loading ? "Verifying..." : "Verify & Access"}
             </button>
+
+            <button
+              onClick={handleResendOTP}
+              disabled={resendDisabled}
+              className="text-sm font-bold text-blue-600"
+            >
+              {resendDisabled ? `Resend in ${countdown}s` : "Resend OTP"}
+            </button>
+
           </div>
         )}
+
       </div>
     </div>
   );
 };
 
-// CRITICAL FIX: This line makes the component "visible" to App.jsx
 export default Login;

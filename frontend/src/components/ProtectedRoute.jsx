@@ -2,16 +2,15 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 
 const ProtectedRoute = ({ children }) => {
-  // Check if user is logged in
-  const isAuthenticated = localStorage.getItem("userEmail");
+    // Make sure this matches the key you use in Login.jsx
+    const userEmail = localStorage.getItem("userEmail");
+    
+    if (!userEmail) {
+        // If no user is found, send them to login
+        return <Navigate to="/login" replace />;
+    }
 
-  if (!isAuthenticated) {
-    // If not logged in, redirect to login page
-    return <Navigate to="/login" replace />;
-  }
-
-  // If logged in, show the requested page
-  return children;
+    return children;
 };
 
 export default ProtectedRoute;

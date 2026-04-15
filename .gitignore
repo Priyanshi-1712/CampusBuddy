@@ -1,3 +1,455 @@
 .env
 node_modules/
 __pycache__/
+import os
+import random
+import shutil
+from typing import List
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, or_, and_
+from sqlalchemy.orm import Session
+from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, Form
+from fastapi.middleware.cors import CORSMiddleware 
+from pydantic import BaseModel, Field
+
+# Import database and models
+from app.core.database import SessionLocal, engine, Base
+from app.models.user import User
+from app.models.resource import Resource
+from app.models.ride import Ride, Booking, Message 
+
+# Initialize Database Tables
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI()
+
+# --- 1. CORS SETUP ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 2. Dependency to get DB session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# 3. Uploads directory
+UPLOAD_DIR = "uploads"
+if not os.path.exists(UPLOAD_DIR):
+    os.makedirs(UPLOAD_DIR)
+
+# --- Pydantic Schemas ---
+class BookingRequest(BaseModel):
+    booker_email: str
+
+class ItemCreate(BaseModel):
+    title: str = Field(..., min_length=1)
+    type: str 
+    price: int = Field(..., gt=0)
+    location: str
+    owner: str
+
+# --- BASIC ROUTES ---
+@app.get("/")
+def health_check():
+    return {"status": "online", "message": "CampusBuddy API is running"}
+
+# --- AUTHENTICATION ROUTES ---
+
+@app.post("/api/auth/signup")
+async def signup(
+    full_name: str = Form(...),
+    email: str = Form(...),
+    mobile_no: str = Form(...),
+    password: str = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    user_exists = db.query(User).filter(User.college_email == email).first()
+    if user_exists:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    file_extension = file.filename.split('.')[-1]
+    file_path = f"{UPLOAD_DIR}/{email}_id.{file_extension}"
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    new_user = User(
+        full_name=full_name, 
+        college_email=email, 
+        mobile_no=mobile_no,
+        hashed_password=password, 
+        is_verified=False, 
+        id_card_url=file_path
+    )
+    db.add(new_user)
+    db.commit()
+    return {"message": "User created successfully"}
+
+@app.post("/api/auth/send-otp")
+def send_otp(data: dict, db: Session = Depends(get_db)):
+    email = data.get("email")
+    password = data.get("password")
+    
+    user = db.query(User).filter(User.college_email == email).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="Account not found.")
+    
+    if user.hashed_password != password:
+        raise HTTPException(status_code=401, detail="Incorrect password.")
+
+    otp = str(random.randint(1000, 9999))
+    user.current_otp = otp
+    db.commit()
+    
+    print(f"🔥 LOGIN OTP FOR {email}: {otp}") 
+    return {"message": "Credentials verified. OTP Sent"}
+
+@app.post("/api/auth/verify-otp")
+def verify_otp(data: dict, db: Session = Depends(get_db)):
+    email = data.get("email")
+    otp_received = data.get("otp")
+    
+    user = db.query(User).filter(User.college_email == email).first()
+    
+    if user and user.current_otp == otp_received:
+        user.current_otp = None
+        db.commit()
+        return {
+            "status": "success", 
+            "username": user.full_name, 
+            "email": user.college_email,
+            "message": "Login successful"
+        }
+    raise HTTPException(status_code=400, detail="Invalid OTP")
+
+@app.post("/api/auth/forgot-password-otp")
+def forgot_password_otp(data: dict, db: Session = Depends(get_db)):
+    email = data.get("email")
+    user = db.query(User).filter(User.college_email == email).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="Email not registered.")
+
+    otp = str(random.randint(1000, 9999))
+    user.current_otp = otp
+    db.commit()
+    
+    print(f"🔄 RESET OTP FOR {email}: {otp}") 
+    return {"message": "Reset OTP sent"}
+
+@app.post("/api/auth/reset-password")
+def reset_password(data: dict, db: Session = Depends(get_db)):
+    email = data.get("email")
+    otp_received = data.get("otp")
+    new_password = data.get("new_password")
+    
+    user = db.query(User).filter(User.college_email == email).first()
+    
+    if user and user.current_otp == otp_received:
+        user.hashed_password = new_password
+        user.current_otp = None
+        db.commit()
+        return {"message": "Password updated successfully!"}
+    
+    raise HTTPException(status_code=400, detail="Invalid OTP")
+
+# --- MARKETPLACE & RIDES ---
+
+@app.get("/api/resources")
+def get_resources(db: Session = Depends(get_db)):
+    return db.query(Resource).all()
+
+@app.get("/api/rides")
+def get_rides(db: Session = Depends(get_db)):
+    return db.query(Ride).all()
+
+@app.post("/api/rides/{ride_id}/book")
+def book_ride_seat(ride_id: int, request: BookingRequest, db: Session = Depends(get_db)):
+    ride = db.query(Ride).filter(Ride.id == ride_id).first()
+    if not ride:
+        raise HTTPException(status_code=404, detail="Ride not found")
+    
+    if ride.seats_available > 0:
+        ride.seats_available -= 1
+        db.add(Booking(ride_id=ride_id, booker_email=request.booker_email))
+        db.commit()
+        return {"message": "Success"}
+    raise HTTPException(status_code=400, detail="Full")
+
+# --- ACTIVITY & PROFILE ROUTES ---
+
+@app.get("/api/my-activity/{email}")
+def get_my_activity(email: str, db: Session = Depends(get_db)):
+    # Using 'Resource' for marketplace listings based on your imports
+    listings = db.query(Resource).filter(Resource.owner == email).all()
+    offers = db.query(Ride).filter(Ride.owner == email).all()
+    bookings = db.query(Ride).join(Booking).filter(Booking.booker_email == email).all()
+    
+    return {
+        "listings": listings,
+        "offers": offers,
+        "bookings": bookings
+    }
+
+@app.delete("/api/delete-resource/{item_id}")
+def delete_resource(item_id: int, db: Session = Depends(get_db)):
+    item = db.query(Resource).filter(Resource.id == item_id).first()
+    if item:
+        db.delete(item)
+        db.commit()
+        return {"message": "Deleted"}
+    raise HTTPException(status_code=404, detail="Not found")
+
+# --- MESSAGING ---
+
+@app.post("/api/messages/send")
+def send_message(data: dict, db: Session = Depends(get_db)):
+    new_msg = Message(
+        sender_email=data['sender'],
+        receiver_email=data['receiver'],
+        content=data['content']
+    )
+    db.add(new_msg)
+    db.commit()
+    return {"status": "sent"}
+
+@app.get("/api/messages/{user_email}/{other_email}")
+def get_chat(user_email: str, other_email: str, db: Session = Depends(get_db)):
+    return db.query(Message).filter(
+        or_(
+            and_(Message.sender_email == user_email, Message.receiver_email == other_email),
+            and_(Message.sender_email == other_email, Message.receiver_email == user_email)
+        )
+    ).order_by(Message.timestamp).all()
+# --- Updated Signup with OTP ---
+@app.post("/api/auth/signup")
+async def signup(
+    full_name: str = Form(...),
+    email: str = Form(...),
+    mobile_no: str = Form(...),
+    password: str = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    # 1. Check if user exists
+    user_exists = db.query(User).filter(User.college_email == email).first()
+    if user_exists:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # 2. Save ID Card
+    file_extension = file.filename.split('.')[-1]
+    file_path = f"{UPLOAD_DIR}/{email}_id.{file_extension}"
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    # 3. Generate OTP
+    otp = str(random.randint(1000, 9999))
+    
+    # 4. Create Unverified User
+    new_user = User(
+        full_name=full_name, 
+        college_email=email, 
+        mobile_no=mobile_no,
+        hashed_password=password, 
+        is_verified=False, # Account is locked until OTP
+        id_card_url=file_path,
+        current_otp=otp
+    )
+    db.add(new_user)
+    db.commit()
+    
+    print(f"📩 SIGNUP OTP FOR {email}: {otp}") 
+    return {"message": "OTP sent to email"}
+
+# --- New Route to Verify Signup ---
+@app.post("/api/auth/verify-signup")
+def verify_signup(data: dict, db: Session = Depends(get_db)):
+    email = data.get("email")
+    otp_received = data.get("otp")
+    
+    user = db.query(User).filter(User.college_email == email).first()
+    
+    if user and user.current_otp == otp_received:
+        user.is_verified = True # Now the user can login
+        user.current_otp = None
+        db.commit()
+        return {"message": "Account verified successfully!"}
+    
+    raise HTTPException(status_code=400, detail="Invalid OTP")
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+
+
+
+
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { User, Mail, Lock, CheckCircle, ArrowRight, ArrowLeft, Upload, ShieldCheck } from 'lucide-react';
+
+const Signup = () => {
+    const navigate = useNavigate();
+    const [step, setStep] = useState(1); // 1: Info, 2: ID Card, 3: OTP
+    const [selectedFile, setSelectedFile] = useState(null);
+    const [otp, setOtp] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [formData, setFormData] = useState({
+        name: '',
+        email: '',
+        mobile_no: '', // Added mobile_no to match your backend
+        password: '',
+        confirm: ''
+    });
+
+    const handleChange = (e) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+    };
+
+    const handleFileChange = (e) => {
+        setSelectedFile(e.target.files[0]);
+    };
+
+    // --- STEP 2: Submit Form & Send OTP ---
+    const handleInitialSignup = async () => {
+        if (formData.password !== formData.confirm) {
+            alert("Passwords do not match!");
+            return;
+        }
+        if (!selectedFile) {
+            alert("Please upload your College ID.");
+            return;
+        }
+
+        setLoading(true);
+        const dataToSend = new FormData();
+        dataToSend.append("full_name", formData.name);
+        dataToSend.append("email", formData.email);
+        dataToSend.append("mobile_no", formData.mobile_no || "0000000000"); // Safety fallback
+        dataToSend.append("password", formData.password);
+        dataToSend.append("file", selectedFile);
+
+        try {
+            const res = await fetch("http://127.0.0.1:8000/api/auth/signup", {
+                method: "POST",
+                body: dataToSend,
+            });
+
+            const result = await res.json();
+
+            if (res.ok) {
+                setStep(3); // Move to OTP Verification
+            } else {
+                // Fix for [object Object] error: Use result.detail
+                alert(result.detail || "Signup failed. Check your connection.");
+            }
+        } catch (error) {
+            alert("Backend server is not responding.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // --- STEP 3: Verify OTP & Activate Account ---
+    const handleVerifyOtp = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch("http://127.0.0.1:8000/api/auth/verify-signup", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: formData.email, otp: otp })
+            });
+
+            const result = await res.json();
+
+            if (res.ok) {
+                alert("Account Verified! You can now login.");
+                navigate("/login");
+            } else {
+                alert(result.detail || "Invalid OTP");
+            }
+        } catch (error) {
+            alert("Verification failed. Try again.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 pt-20">
+            <div className="bg-white w-full max-w-[420px] rounded-[2.5rem] shadow-2xl p-10 border border-slate-100">
+
+                {/* Progress Bar */}
+                <div className="flex gap-2 mb-8">
+                    <div className={`h-2 flex-1 rounded-full ${step >= 1 ? 'bg-blue-600' : 'bg-slate-100'}`}></div>
+                    <div className={`h-2 flex-1 rounded-full ${step >= 2 ? 'bg-blue-600' : 'bg-slate-100'}`}></div>
+                    <div className={`h-2 flex-1 rounded-full ${step >= 3 ? 'bg-blue-600' : 'bg-slate-100'}`}></div>
+                </div>
+
+                <h1 className="text-2xl font-black text-slate-800 text-center mb-6">
+                    {step === 1 ? "Create Account" : step === 2 ? "Verify Identity" : "Verify Email"}
+                </h1>
+
+                {step === 1 && (
+                    <div className="space-y-4">
+                        <input name="name" type="text" placeholder="Full Name" className="w-full bg-slate-50 p-4 rounded-2xl border-2 border-transparent focus:border-blue-500 outline-none" onChange={handleChange} />
+                        <input name="email" type="email" placeholder="name@poornima.edu.in" className="w-full bg-slate-50 p-4 rounded-2xl border-2 border-transparent focus:border-blue-500 outline-none" onChange={handleChange} />
+                        <input name="mobile_no" type="text" placeholder="Mobile Number" className="w-full bg-slate-50 p-4 rounded-2xl border-2 border-transparent focus:border-blue-500 outline-none" onChange={handleChange} />
+                        <input name="password" type="password" placeholder="Password" className="w-full bg-slate-50 p-4 rounded-2xl border-2 border-transparent focus:border-blue-500 outline-none" onChange={handleChange} />
+                        <input name="confirm" type="password" placeholder="Confirm Password" className="w-full bg-slate-50 p-4 rounded-2xl border-2 border-transparent focus:border-blue-500 outline-none" onChange={handleChange} />
+                        <button onClick={() => setStep(2)} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold shadow-lg">Next Step →</button>
+                    </div>
+                )}
+
+                {step === 2 && (
+                    <div className="space-y-6 text-center">
+                        <div className="border-4 border-dashed border-slate-100 rounded-[2rem] py-10 bg-slate-50 relative">
+                            <input type="file" id="id-upload" className="hidden" onChange={handleFileChange} accept="image/*" />
+                            <label htmlFor="id-upload" className="cursor-pointer block">
+                                <Upload className="mx-auto mb-2 text-blue-600" size={32} />
+                                <span className="text-blue-600 font-bold block">{selectedFile ? selectedFile.name : "Upload Poornima ID Card"}</span>
+                            </label>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={() => setStep(1)} className="flex-1 bg-slate-100 py-4 rounded-2xl font-bold text-slate-600">Back</button>
+                            <button onClick={handleInitialSignup} disabled={loading} className="flex-[2] bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg">
+                                {loading ? "Sending OTP..." : "Get OTP"}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {step === 3 && (
+                    <div className="space-y-6 text-center">
+                        <p className="text-slate-500">We've sent a 4-digit code to <br/><strong>{formData.email}</strong></p>
+                        <input 
+                            type="text" maxLength="4" placeholder="0000" 
+                            className="w-full text-center text-3xl font-black py-4 bg-slate-50 rounded-2xl border-2 border-blue-600 outline-none tracking-widest"
+                            onChange={(e) => setOtp(e.target.value)}
+                        />
+                        <button onClick={handleVerifyOtp} disabled={loading} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg">
+                            {loading ? "Verifying..." : "Verify & Complete"}
+                        </button>
+                        <button onClick={() => setStep(2)} className="text-sm font-bold text-slate-400">Resend OTP / Back</button>
+                    </div>
+                )}
+
+                <p className="text-center text-sm text-slate-500 mt-6">
+                    Already have an account? <span onClick={() => navigate("/login")} className="text-blue-600 font-bold cursor-pointer hover:underline">Login</span>
+                </p>
+            </div>
+        </div>
+    );
+};
+
+export default Signup;
