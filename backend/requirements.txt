@@ -12,6 +12,8 @@ alembic==1.13.1            # Database migrations
 python-jose[cryptography]==3.3.0  # JWT Token generation
 passlib[bcrypt]==1.7.4            # Password hashing
 python-multipart==0.0.6           # Required for OAuth2 forms
+opencv-python-headless==          # For image processing in driver verification (if needed)
+
 
 # --- Real-time & Communication ---
 websockets==12.0           # For Live Ride Tracking
