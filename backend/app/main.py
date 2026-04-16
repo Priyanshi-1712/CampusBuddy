@@ -209,8 +209,7 @@ def robust_normalize(text):
         t = t.replace(char, replacement)
     return re.sub(r'[^a-z0-9]', '', t).strip()
 
-# --- REAL EMAIL SENDER ---
-# import ssl 
+# --- REAL EMAIL SENDER --- 
 
 def send_email_otp(email: str, otp: str, subject_type="verification"):
     try:
