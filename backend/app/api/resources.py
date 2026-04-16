@@ -10,21 +10,17 @@ from app.services.ai_ranking import ResourceRanker
 from app.models.user import User
 from fastapi import APIRouter, Depends, HTTPException 
 router = APIRouter(prefix="/api/marketplace", tags=["Marketplace"])
-
 class MessageCreate(BaseModel):
     item_id: int
     sender_email: str
     receiver_email: str
     content: str
-
 @router.get("/search")
 async def search_resources(query: str, category: Optional[str] = None, db: Session = Depends(get_db)):
     query_builder = db.query(Resource).filter(Resource.title.ilike(f"%{query}%"))
     if category and category != "All":
         query_builder = query_builder.filter(Resource.category == category)
-    
     raw_resources = query_builder.all()
-    
     ranked_list = []
     for res in raw_resources:
         score = ResourceRanker.calculate_score(
@@ -43,11 +39,8 @@ async def search_resources(query: str, category: Optional[str] = None, db: Sessi
             "status": res.status,
             "ai_score": round(score, 2)
         })
-
     ranked_list.sort(key=lambda x: x["ai_score"], reverse=True)
     return ranked_list
-
-
 @router.post("/messages/send")
 async def send_message(data: MessageCreate, db: Session = Depends(get_db)):
     new_msg = Message(
@@ -59,8 +52,6 @@ async def send_message(data: MessageCreate, db: Session = Depends(get_db)):
     db.add(new_msg)
     db.commit()
     return {"status": "success"}
-
-
 @router.get("/messages/history/{item_id}")
 async def get_history(item_id: int, user1: str, user2: str, db: Session = Depends(get_db)):
     messages = db.query(Message).filter(
@@ -70,12 +61,9 @@ async def get_history(item_id: int, user1: str, user2: str, db: Session = Depend
             (Message.sender_email == user2) & (Message.receiver_email == user1)
         )
     ).order_by(Message.timestamp.asc()).all()
-
-
 @router.get("/inbox/{user_email:path}")
 def get_inbox(user_email: str, db: Session = Depends(get_db)):
     user_email = user_email.lower().strip()
-
     messages = (
         db.query(Message, User.full_name)
         .join(User, Message.sender_email == User.college_email)
@@ -83,7 +71,6 @@ def get_inbox(user_email: str, db: Session = Depends(get_db)):
         .order_by(Message.timestamp.desc())
         .all()
     )
-
     result = []
     for m, full_name in messages:
         result.append({
@@ -94,5 +81,4 @@ def get_inbox(user_email: str, db: Session = Depends(get_db)):
             "is_read": m.is_read,
             "timestamp": m.timestamp.isoformat() if m.timestamp else None
         })
-
     return result
