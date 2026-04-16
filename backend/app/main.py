@@ -40,8 +40,8 @@ from passlib.context import CryptContext
 # --- SMTP CONFIGURATION ---
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 465
-SENDER_EMAIL = "2025mcaaidspriyanshi23062@poornima.edu.in" 
-SENDER_PASSWORD = "luhyzkinzqposrst" 
+SENDER_EMAIL = "campusbuddy.admin@gmail.com" 
+SENDER_PASSWORD = "kyvhmvznsedwdfmx" 
 
 # Initialize EasyOCR Reader (English)
 reader = easyocr.Reader(['en'])
@@ -181,9 +181,9 @@ class ReportRequest(BaseModel):
     item_id: Optional[int] = None
 
 conf = ConnectionConfig(
-    MAIL_USERNAME = "2025mcaaidspriyanshi23062@poornima.edu.in",
-    MAIL_PASSWORD = "luhyzkinzqposrst", 
-    MAIL_FROM = "2025mcaaidspriyanshi23062@poornima.edu.in",
+    MAIL_USERNAME = "campusbuddy.admin@gmail.com",
+    MAIL_PASSWORD = "kyvhmvznsedwdfmx", 
+    MAIL_FROM = "campusbuddy.admin@gmail.com",
     MAIL_PORT = 587,                    
     MAIL_SERVER = "smtp.gmail.com",
     MAIL_STARTTLS = True,               
@@ -203,7 +203,7 @@ def robust_normalize(text):
 # --- REAL EMAIL SENDER --- 
 def send_email_otp(email: str, otp: str, subject_type="verification"):
     try:
-        CURRENT_AUTH_PW = "luhyzkinzqposrst" 
+        CURRENT_AUTH_PW = "kyvhmvznsedwdfmx" 
         message = MIMEMultipart()
         message["From"] = f"CampusBuddy Support <{SENDER_EMAIL}>"
         message["To"] = email

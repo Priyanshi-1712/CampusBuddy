@@ -54,10 +54,10 @@ const AboutUs = () => {
                             <span className="text-[#FFC107] font-black uppercase tracking-[0.3em] text-[10px]">Architected by FutureBits</span>
                         </div>
                         <h1 className="text-5xl md:text-6xl font-black mb-6 tracking-tighter uppercase leading-none">
-                            Market <span className="text-[#FFC107]">Buddy.</span>
+                            Campus <span className="text-[#FFC107]">Buddy.</span>
                         </h1>
                         <p className="text-blue-100/70 leading-relaxed max-w-lg font-bold text-lg italic">
-                            A passion project born out of the dorm rooms of Poornima. Created by a team of 4 dedicated college students—<span className="text-[#FFC107] not-italic underline decoration-2 underline-offset-4">FutureBits-4</span>—to bridge the gap between campus needs and student resources.
+                            A passion project born out of the dorm rooms of Poornima. Created by a team of 4 dedicated college students—<span className="text-[#FFC107] not-italic underline decoration-2 underline-offset-4">FutureBits</span>—to bridge the gap between campus needs and student resources.
                         </p>
                     </div>
                     <Rocket className="absolute -right-12 -bottom-12 text-white/5 rotate-12 pointer-events-none" size={320} />

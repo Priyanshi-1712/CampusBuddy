@@ -59,9 +59,9 @@ async def send_sos(data: SOSRequest, db: Session = Depends(get_db)):
 
     # 4. Email Configuration
     google_maps_link = f"https://www.google.com/maps?q={data.lat},{data.lng}"
-    sender_email = "2025mcaaidspriyanshi23062@poornima.edu.in." 
-    sender_password = "luhyzkinzqposrst"           
-    receiver_email = "2025mcaaidspriyanshi23062@poornima.edu.in"        
+    sender_email = "campusbuddy.admin@gmail.com" 
+    sender_password = "kyvhmvznsedwdfmx"           
+    receiver_email = "campusbuddy.admin@gmail.com"        
     
     subject = f"🚨 SOS ALERT #{alert_id}: {user_name} Needs Help!"
     body = f"""
