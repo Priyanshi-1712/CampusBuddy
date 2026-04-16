@@ -2,7 +2,6 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from typing import Dict, List
 
 router = APIRouter()
-
 # Dictionary to store active ride connections: {ride_id: [list_of_connected_websockets]}
 class ConnectionManager:
     def __init__(self):

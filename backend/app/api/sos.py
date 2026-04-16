@@ -4,37 +4,25 @@ from sqlalchemy.orm import Session
 import smtplib
 from email.mime.text import MIMEText
 from datetime import datetime, timezone
-
-# Adjust these imports to match your project structure!
 from app.models.user import SOSAlert 
 from app.core.database import get_db
 from app.models.user import User
 from app.models.ride import Ride, Booking
-
 router = APIRouter()
-
-# UPDATED: Added default values to prevent "422 Unprocessable Entity" if frontend GPS is slow
 class SOSRequest(BaseModel):
     email: str
     lat: float = 0.0
     lng: float = 0.0
     location: str = "Unknown"
-
 @router.post("/trigger")
 async def send_sos(data: SOSRequest, db: Session = Depends(get_db)):
     print("\n" + "="*50)
     print(f"🚨 URGENT SOS INITIATED BY: {data.email}")
     print("="*50)
-    
-    # 1. Fetch the Student and their Phone Number
     user = db.query(User).filter(User.college_email == data.email.lower().strip()).first()
     user_name = user.full_name if user else "Unknown Student"
-    # Get phone number from DB (previously saved during signup)
     user_phone = getattr(user, 'phone_number', "Not Provided") if user else "Unknown"
-    
-    # 2. Check Active Ride Status
     active_ride_info = "Not in an active ride."
-    
     driver_ride = db.query(Ride).filter(Ride.owner == data.email.lower().strip(), Ride.status == "IN_TRANSIT").first()
     if driver_ride:
         active_ride_info = f"DRIVER - Ride ID: {driver_ride.id}, Dest: {driver_ride.destination}"
@@ -104,7 +92,6 @@ Please take immediate action.
         print("📧 Attempting to connect to Google SMTP server...")
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
             server.login(sender_email, sender_password)
-            # UPDATED: Fixed method name from send_mail to sendmail
             server.sendmail(sender_email, receiver_email, msg.as_string())
             print(f"✅ EMERGENCY EMAIL SUCCESSFULLY SENT TO {receiver_email}")
         return {"status": "success", "message": "Alert sent and logged."}
