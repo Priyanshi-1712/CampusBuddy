@@ -45,11 +45,9 @@ SENDER_PASSWORD = "luhyzkinzqposrst"
 
 # Initialize EasyOCR Reader (English)
 reader = easyocr.Reader(['en'])
-
 # Initialize Database
 Base.metadata.create_all(bind=engine)
 app = FastAPI()
-
 # Create router for custom user endpoints
 router = APIRouter()
 
@@ -59,14 +57,12 @@ IMAGES_DIR = os.path.join(UPLOAD_ROOT, "img")
 AVATARS_DIR = os.path.join(UPLOAD_ROOT, "avatars") 
 NOTES_DIR = os.path.join(UPLOAD_ROOT, "notes")
 PAPERS_DIR = os.path.join(UPLOAD_ROOT, "old_papers")
-
 for p in [IMAGES_DIR, AVATARS_DIR, NOTES_DIR, PAPERS_DIR]:
     if not os.path.exists(p): 
         os.makedirs(p, exist_ok=True)
 
 # 2. MOUNT STATIC FILES
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
 # --- CORS CONFIGURATION ---
 app.add_middleware(
     CORSMiddleware,
@@ -82,7 +78,6 @@ app.add_middleware(
     allow_methods=["*"],  # Allows GET, POST, DELETE, OPTIONS, etc.
     allow_headers=["*"],  # Allows all headers (Content-Type, Authorization, etc.)
 )
-
 # 3. DB Session
 def get_db():
     db = SessionLocal()
@@ -91,8 +86,7 @@ def get_db():
     finally: 
         db.close()
 
-# 5. SCHEMAS
-# --- Redemption Schema ---
+# 3. SCHEMAS --- Redemption Schema ---
 class RedeemRequest(BaseModel):
     email: str
     amount: float
@@ -100,8 +94,6 @@ class RedeemRequest(BaseModel):
     account_number: str
     ifsc_code: str
     bank_name: str
-
-# --- Redemption Endpoint ---
 
 class SignupRequest(BaseModel):
     email: str
@@ -179,6 +171,7 @@ class ReviewCreate(BaseModel):
 
 class SubscribeRequest(BaseModel):
     email: EmailStr
+
 class ReportRequest(BaseModel):
     reporter_email: str
     reported_email: str
@@ -191,14 +184,13 @@ conf = ConnectionConfig(
     MAIL_USERNAME = "2025mcaaidspriyanshi23062@poornima.edu.in",
     MAIL_PASSWORD = "luhyzkinzqposrst", 
     MAIL_FROM = "2025mcaaidspriyanshi23062@poornima.edu.in",
-    MAIL_PORT = 587,                    # Use 587 for STARTTLS
+    MAIL_PORT = 587,                    
     MAIL_SERVER = "smtp.gmail.com",
-    MAIL_STARTTLS = True,               # Enable STARTTLS
+    MAIL_STARTTLS = True,               
     MAIL_SSL_TLS = False,
     USE_CREDENTIALS = True,
-    VALIDATE_CERTS = False              # Set to False to prevent local cert errors
+    VALIDATE_CERTS = False              
 )
-
 # Helper function for aggressive cleaning 
 def robust_normalize(text):
     if not text: return ""
@@ -208,18 +200,13 @@ def robust_normalize(text):
     for char, replacement in confusions.items():
         t = t.replace(char, replacement)
     return re.sub(r'[^a-z0-9]', '', t).strip()
-
 # --- REAL EMAIL SENDER --- 
-
 def send_email_otp(email: str, otp: str, subject_type="verification"):
     try:
-        # Use the unified App Password that matches your FastMail config
         CURRENT_AUTH_PW = "luhyzkinzqposrst" 
-
         message = MIMEMultipart()
         message["From"] = f"CampusBuddy Support <{SENDER_EMAIL}>"
         message["To"] = email
-        
         if subject_type == "reset":
             message["Subject"] = f"{otp} is your Password Reset Code"
             title = "Reset Your Password"
@@ -246,16 +233,12 @@ def send_email_otp(email: str, otp: str, subject_type="verification"):
         </html>
         """
         message.attach(MIMEText(body, "html"))
-        
         context = ssl.create_default_context() 
-        
         context = ssl.create_default_context() 
-        
         with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context) as server:
             # We use CURRENT_AUTH_PW to ensure it matches the token used in other routers
             server.login(SENDER_EMAIL, CURRENT_AUTH_PW)
             server.send_message(message)
-            
         print(f"✅ OTP {otp} successfully delivered to {email}")
         return True
     except Exception as e:
@@ -269,30 +252,22 @@ async def verify_student_id(
 ):
     print(f"DEBUG: Starting Strict Verification for {full_name}")
     contents = await id_card.read()
-    
-    # --- MOVE THIS UP (CRITICAL FIX) ---
+
     nparr = np.frombuffer(contents, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if img is None:
         raise HTTPException(status_code=400, detail="Invalid image")
-    # if img is None:
-    #     return {"success": False, "error": "AI could not read the image. Please upload a clear JPG/PNG."}
-    # -----------------------------------
     height, width = img.shape[:2]
     if width > 800:
         img = cv2.resize(img, (800, int(height * (800 / width))))
-
-    # Now define results AFTER img is defined
     results = reader.readtext(img, detail=0)  
     text_raw = " ".join(results).lower()
     c_detected = robust_normalize(text_raw)
     
-    # LOCK 1: Institutional Keywords (Recognize all branches)
     uni_keywords = ["poornima", "piet", "pce", "pgi", "university", "college","transport","hostel","student"]
     if not any(k in text_raw or k in c_detected for k in uni_keywords):
         return {"success": False, "error": "ID card must be from a Poornima Group institution"}
     
-    # LOCK 2: Personal Ownership (Check name parts)
     name_parts = full_name.lower().split()
     if not any(robust_normalize(part) in c_detected for part in name_parts if len(part) > 2):
         return {"success": False, "error": "Identity Theft Protection: Name on ID does not match your input."}
@@ -307,45 +282,33 @@ async def verify_student_id(
         faces = face_cascade.detectMultiScale(gray, 1.1, 4)
         if len(faces) > 0:
             return {"success": True, "message": "Verified! Face and Identity matched."}
-
     return {"success": True, "message": "Verified, but no face detected."}
-
-
 # --- FORGOT PASSWORD: STEP 1 (Send OTP) ---
 @app.post("/api/auth/forgot-password")
 async def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
     email = req.email.lower().strip()
     user = db.query(User).filter(User.college_email == email).first()
-    
     if not user:
         raise HTTPException(status_code=404, detail="No account found with this email.")
-
-    # Generate a reset OTP
+    # ------Generate a reset OTP-------
     otp = str(random.randint(1000, 9999))
     user.current_otp = otp
     user.otp_created_at = datetime.now(timezone.utc)
-    
-    # Send the email (using your existing send_email_otp function)
     email_sent = send_email_otp(email, otp, subject_type="reset")
     if not email_sent:
         raise HTTPException(status_code=500, detail="Failed to send reset email.")
-    
     db.commit()
     return {"status": "success", "message": "Reset code sent to your email."}
-
 # --- FORGOT PASSWORD: STEP 2 (Verify & Reset) ---
 @app.post("/api/auth/reset-password-verify")
 async def reset_password_final(req: ResetPasswordVerify, db: Session = Depends(get_db)):
     email = req.email.lower().strip()
     user = db.query(User).filter(User.college_email == email).first()
-    
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
-
     # 1. Verify OTP
     if str(user.current_otp).strip() != str(req.otp).strip():
         raise HTTPException(status_code=400, detail="Invalid reset code.")
-    
     # 2. Check Expiry (10 mins)
     now = datetime.now(timezone.utc)
     otp_time = user.otp_created_at
@@ -354,14 +317,11 @@ async def reset_password_final(req: ResetPasswordVerify, db: Session = Depends(g
             otp_time = otp_time.replace(tzinfo=timezone.utc)
         if now > (otp_time + timedelta(minutes=10)):
             raise HTTPException(status_code=400, detail="Reset code has expired.")
-
     # 3. Update Password
     user.hashed_password = req.new_password 
     user.current_otp = None # Clear OTP after success
     db.commit()
-    
     return {"status": "success", "message": "Password updated successfully!"}
-
 # --- SUBSCRIPTION & NEWSLETTER ---
 @app.post("/api/subscribe")
 async def subscribe_user(data: SubscribeRequest, db: Session = Depends(get_db)):
@@ -376,7 +336,6 @@ async def subscribe_user(data: SubscribeRequest, db: Session = Depends(get_db)):
             # If they already exist in DB, we still try to send the mail in case they missed it
             print(f"ℹ️ User {data.email} already in database. Resending welcome mail.")
 
-        # 2. Professional HTML Template
         html_content = f"""
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; border-radius: 10px; padding: 20px;">
             <h2 style="color: #05488B;">Priority Access Granted! 🚀</h2>
@@ -387,7 +346,6 @@ async def subscribe_user(data: SubscribeRequest, db: Session = Depends(get_db)):
             <p style="font-size: 12px; color: #666; margin-top: 20px;">Engineering Excellence — Team FutureBiits</p>
         </div>
         """
-
         # 3. Message Configuration
         message = MessageSchema(
             subject="CampusBuddy | Priority Access Granted! ⚡",
@@ -395,7 +353,6 @@ async def subscribe_user(data: SubscribeRequest, db: Session = Depends(get_db)):
             body=html_content,
             subtype=MessageType.html # CRITICAL: Tells Gmail this is an aesthetic email
         )
-
         # 4. Dispatch Email
         fm = FastMail(conf)
         await fm.send_message(message)
@@ -410,26 +367,20 @@ async def subscribe_user(data: SubscribeRequest, db: Session = Depends(get_db)):
         print(f"❌ MAIL FAILURE: {str(e)}")
         # Returns success because the user is likely already recorded in the DB
         return {"status": "success", "note": "Subscribed to DB only"}
-
 # --- AUTH ROUTES ---
-
 @app.get("/api/users/me")
 def get_user_profile(email: str, db: Session = Depends(get_db)):
     clean_email = email.lower().strip()
     user = db.query(User).filter(User.college_email == clean_email).first()
-    
     if not user:
         # Instead of crashing, we return a 404
         raise HTTPException(status_code=404, detail="User not found")
-    
-    # Check if wallet exists, if not, create it on the fly to prevent crash
     wallet = db.query(Wallet).filter(Wallet.user_id == user.id).first()
     if not wallet:
         wallet = Wallet(user_id=user.id, balance=0.0, pending_earnings=0.0, total_revenue=0.0)
         db.add(wallet)
         db.commit()
         db.refresh(wallet)
-    
     return {
         "full_name": user.full_name,
         "college_email": user.college_email,
@@ -437,7 +388,6 @@ def get_user_profile(email: str, db: Session = Depends(get_db)):
         "points": getattr(user, "points", 0) or 0,
         "created_at": user.created_at,
         "is_driver_verified": getattr(user, "is_driver_verified", False),
-        # Added this for frontend logic checks
         "is_verified": getattr(user, "is_verified", False), 
         "wallet_balance": wallet.balance,
         "wallet_pending": wallet.pending_earnings,
@@ -445,30 +395,22 @@ def get_user_profile(email: str, db: Session = Depends(get_db)):
     }
 @app.post("/api/wallet/redeem")
 async def redeem_to_bank(req: RedeemRequest, db: Session = Depends(get_db)):
-
     user = db.query(User).filter(User.college_email == req.email.lower().strip()).first()
-    
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
     wallet = db.query(Wallet).filter(Wallet.user_id == user.id).first()
-
-    # 🔥 ADDED (important edge case check)
     if not wallet:
         raise HTTPException(status_code=404, detail="Wallet not found")
     
     # 1. Validation: Check if they have enough money
     if wallet.balance < req.amount:
         raise HTTPException(status_code=400, detail="Insufficient balance for withdrawal.")
-    
     # 2. Validation: Minimum limit for professional feel
     if req.amount < 100:
         raise HTTPException(status_code=400, detail="Minimum redemption amount is ₹100.")
-
     try:
         # 3. Deduct from Virtual Balance
         wallet.balance -= req.amount
-        
         # 4. Create a Transaction Ledger Entry
         new_tx = Transaction(
             user_id=user.id,
@@ -477,13 +419,9 @@ async def redeem_to_bank(req: RedeemRequest, db: Session = Depends(get_db)):
             description=f"Redeemed to {req.bank_name} (A/c: ...{req.account_number[-4:]})"
         )
         db.add(new_tx)
-
-        # 🔥 ADDED (ensures DB updates properly)
         db.add(wallet)
-
         db.commit()
         
-        # Logging for your demo terminal
         print(f"🏦 REDEMPTION: ₹{req.amount} processed for {user.college_email}")
         
         return {
@@ -522,13 +460,11 @@ async def signup_otp(payload: dict, db: Session = Depends(get_db)):
         db.add(new_user)
     else:
         existing_user.current_otp = otp_code
-        # Added this to ensure the timestamp updates for expiry logic
         existing_user.otp_created_at = datetime.now(timezone.utc)
 
     try:
         db.commit()
         
-        # --- FIXED EMAIL SENDING LOGIC ---
         try:
             # 1. Removed '#' to uncomment the line
             # 2. Changed 'send_otp_email' to 'send_email_otp' to match your function name
@@ -613,16 +549,6 @@ async def register_final(
     email_clean = email.lower().strip()
     prefix = email_clean.split('@')[0]
 
-    # --- EXTRACT IDENTITY FROM EMAIL (ADDED PER YOUR REQUEST) ---
-    # email_identity = re.sub(r'[^a-zA-Z]', '', prefix)
-    # branch_codes = [
-    #     'mca', 'bca', 'btech', 'mba', 'bba', 'ba', 'ma', 'mtech', 'bcom',
-    #     'barch', 'bsc', 'bs', 'bdes', 'bva', 'phd', 'mplan', 'mys & tm', 
-    #     'mph', 'pihm', 'pce', 'piet'
-    # ]
-    # for code in branch_codes:
-    #     email_identity = email_identity.replace(code, '')
-
     # -------- 1. OPTIMIZED IMAGE LOADING (PRESERVED) --------
     contents = await id_card.read()
     nparr = np.frombuffer(contents, np.uint8)
@@ -631,20 +557,19 @@ async def register_final(
     if img is None:
         raise HTTPException(status_code=400, detail="Invalid image uploaded")
 
-    # Resize image to max 1000px (PRESERVED)
     h, w = img.shape[:2]
     if max(h, w) > 1000:
         scale = 1000 / max(h, w)
         img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
 
-    # -------- 2. OPTIMIZED OCR (PRESERVED) --------
+    # --------  OPTIMIZED OCR (PRESERVED) --------
     results = reader.readtext(img, detail=0, paragraph=True)
     detected_text_raw = " ".join(results).lower()
     
     c_detected = robust_normalize(detected_text_raw)
     c_reg_input = robust_normalize(registration_no)
 
-    # -------- 3. STRICT TRIPLE LOCK (PRESERVED & ENHANCED) --------
+    # --------  STRICT TRIPLE LOCK (PRESERVED & ENHANCED) --------
     
     # LOCK 1: Institutional Check (PRESERVED)
     uni_keywords = [
@@ -659,14 +584,11 @@ async def register_final(
     reg_suffix = c_reg_input[-5:] if len(c_reg_input) > 5 else c_reg_input
     is_reg_valid = any(c_reg_input[-5:] in word for word in results) or (c_reg_input in c_detected)
 
-    # LOCK 3: IDENTITY MATCHING
-    # is_identity_valid = email_identity in c_detected if len(email_identity) > 2 else True
-    
     # Part B: Typed Name parts check 
     name_parts = [robust_normalize(p) for p in full_name.split() if len(p) > 2]
     is_name_valid = all(part in c_detected for part in name_parts) if name_parts else False
 
-    # -------- 4. GATEKEEPER --------
+    # --------  GATEKEEPER --------
     # Check if Uni is valid AND Reg is valid AND (Typed Name OR Email Prefix) matches the ID
     if not (is_uni_valid and is_reg_valid and is_name_valid):
         print(f"❌ FAILED: Uni:{is_uni_valid}, Reg:{is_reg_valid}, Name:{is_name_valid}")
@@ -675,18 +597,17 @@ async def register_final(
             detail="Verification Failed: Name or Reg No not clearly visible on ID card."
         )
 
-    # -------- 5. DB PERSISTENCE --------
+    # -------- DB PERSISTENCE --------
     user = db.query(User).filter(User.college_email == email_clean).first()
     if not user:
         raise HTTPException(status_code=404, detail="Session expired. Please restart signup.")
-
     user.full_name = full_name.strip()
     user.hashed_password = password.strip() 
     user.registration_no = registration_no.strip()
     user.phone_number = phone_number.strip()
     user.is_verified = True
 
-    # -------- 6. FAST FACE CROP  --------
+    # -------- FAST FACE CROP  --------
     try:
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
@@ -699,48 +620,35 @@ async def register_final(
             user.avatar_url = f"/{avatar_path}"
     except Exception as e:
         print("Face detection skipped:", e)
-
     db.commit()
     return {"status": "success", "message": "ID Verified Successfully! 🎉"}
-
-# ---- seprates
-
 
 async def run_9pm_settlement():
     while True:
         now = datetime.now()
-
         if now.hour == 21 and now.minute == 0:
             print("LOG: Starting 9 PM Wallet Settlement...")
             db = SessionLocal()
-
             try:
                 wallets = db.query(Wallet).filter(Wallet.pending_earnings > 0).all()
-
                 for w in wallets:
                     settlement_amount = w.pending_earnings
                     w.balance += settlement_amount
                     w.pending_earnings = 0
-
                     db.add(Transaction(
                         user_id=w.user_id,
                         amount=settlement_amount,
                         type="SETTLEMENT",
                         description="Daily 9 PM Virtual Balance Update"
                     ))
-
                 db.commit()
                 print(f"LOG: Successfully settled {len(wallets)} wallets.")
-
             except Exception as e:
                 print(f"ERROR: Settlement failed: {e}")
                 db.rollback()
-
             finally:
                 db.close()
-
             await asyncio.sleep(61)  
-
         await asyncio.sleep(30)
     # --- SAVE USER ---
     user.full_name = full_name
@@ -748,53 +656,41 @@ async def run_9pm_settlement():
     user.registration_no = registration_no
     user.phone_number = phone_number
     user.is_verified = True
-
     # --- FACE DETECTION ---
     try:
         face_cascade = cv2.CascadeClassifier(
             cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
         )
         faces = face_cascade.detectMultiScale(gray, 1.1, 4)
-
         if len(faces) > 0:
             (x, y, w, h) = faces[0]
             face_crop = img[max(0, y-50):y+h+50, max(0, x-50):x+w+50]
-
             avatar_path = f"static/avatars/avatar_{prefix}.jpg"
             cv2.imwrite(avatar_path, face_crop)
             user.avatar_url = f"/{avatar_path}"
-
     except Exception as e:
         print("Face detection error:", e)
-
     db.commit()
-
     return {
         "status": "success",
         "message": "ID Verified Successfully ✅"
     }
-
-# 2. Trigger it on startup
+#Trigger it on startup
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(run_9pm_settlement())
-
-    
 @app.post("/api/auth/signup-otp")
 async def signup_otp(payload: dict, db: Session = Depends(get_db)):
     # 1. Clean Email
     raw_email = payload.get("email", "")
     email = "".join(raw_email.split()).lower().strip()
-    
     # 2. Domain Check
     if not email.endswith("@poornima.edu.in"):
         raise HTTPException(status_code=400, detail="Use @poornima.edu.in email only.")
-    
     # 3. DB Check
     existing_user = db.query(User).filter(User.college_email == email).first()
     if existing_user and existing_user.is_verified:
         raise HTTPException(status_code=400, detail="Email already registered.")
-
     # 4. Generate & Save OTP
     otp_code = str(random.randint(1000, 9999))
     if not existing_user:
@@ -803,40 +699,29 @@ async def signup_otp(payload: dict, db: Session = Depends(get_db)):
     else:
         existing_user.current_otp = otp_code
         existing_user.otp_created_at = datetime.now(timezone.utc)
-
     db.commit()
-
     # 5. SEND EMAIL
     email_sent = send_email_otp(email, otp_code)
-    
-    # DEMO FAILSAFE: Always return the code to terminal if email fails
     if not email_sent:
         print(f"⚠️ MAIL BLOCKED: USE CODE {otp_code}")
         return {"status": "partial_success", "debug_otp": otp_code}
-    
     return {"status": "success", "message": "OTP Sent"}
 @router.post("/api/auth/verify-otp")
 def verify_otp(data: dict, db: Session = Depends(get_db)):
     email = data.get("email", "").lower().strip()
     otp_input = str(data.get("otp", "")).strip()
-    
-    # Use filter instead of ilike for standard lookups
     user = db.query(User).filter(User.college_email == email).first()
-    
     if not user:
         raise HTTPException(status_code=400, detail="User not found.")
-
     if str(user.current_otp).strip() == otp_input:
-        # Success logic...
         return {
             "status": "success",
             "username": user.full_name or "",
             "email": user.college_email
         }
-    
     raise HTTPException(status_code=400, detail="Invalid OTP code.")
-# --- RIDES, WISHLIST, ORDERS ---
 
+# --- RIDES, WISHLIST, ORDERS ---
 @app.get("/api/my-offered-rides/{email}")
 def get_my_offered_rides(email: str, db: Session = Depends(get_db)):
     email_clean = email.lower().strip()
@@ -873,21 +758,14 @@ def get_my_offered_rides(email: str, db: Session = Depends(get_db)):
         result.append(ride_dict)
         
     return result
-
-
-
-# --- BULLETPROOF WISHLIST ROUTES ---
-
 @app.get("/api/marketplace/wishlist")
 def get_wishlist(email: Optional[str] = None, user_email: Optional[str] = None, db: Session = Depends(get_db)):
     target_email = email or user_email
     if not target_email:
         return []
-        
     email_clean = target_email.lower().strip()
     items = db.query(Resource).join(Wishlist, Resource.id == Wishlist.item_id)\
               .filter(Wishlist.user_email == email_clean).all()
-              
     return items
 
 @app.get("/api/wishlist/{email}")
@@ -910,7 +788,6 @@ def add_to_wishlist(data: dict, db: Session = Depends(get_db)):
         user_email = str(raw_email).lower().strip()
         item_id = data.get("item_id") or data.get("id")
         
-        # Check if it already exists to prevent duplicates
         exists = db.query(Wishlist).filter(
             Wishlist.user_email == user_email, 
             Wishlist.item_id == int(item_id)
@@ -919,7 +796,6 @@ def add_to_wishlist(data: dict, db: Session = Depends(get_db)):
         if exists:
             return {"status": "success", "message": "Already in wishlist"}
 
-        # Actually save it to the database
         new_item = Wishlist(user_email=user_email, item_id=int(item_id))
         db.add(new_item)
         db.commit()
@@ -949,9 +825,6 @@ def delete_from_wishlist(email: str, item_id: int, db: Session = Depends(get_db)
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-# -----------------------------------
-
-
 @app.post("/api/rides/{ride_id}/book")
 async def book_ride(ride_id: int, request: BookingRequest, db: Session = Depends(get_db)):
     # 1. Find the ride
@@ -970,15 +843,12 @@ async def book_ride(ride_id: int, request: BookingRequest, db: Session = Depends
         headers={"Access-Control-Allow-Origin": "http://localhost:5173"}
     )
     
-    # 2. Check seat availability
     if ride.seats_available <= 0:
         return JSONResponse(
             status_code=400, 
             content={"detail": "No seats available"},
             headers={"Access-Control-Allow-Origin": "http://localhost:5173"}
         )
-    
-    # --- CRITICAL FIX: Find the Driver User ---
     # We use ride.owner (which is an email) to get the driver's numeric ID
     driver = db.query(User).filter(User.college_email == ride.owner).first()
     if not driver:
@@ -986,14 +856,14 @@ async def book_ride(ride_id: int, request: BookingRequest, db: Session = Depends
         raise HTTPException(status_code=404, detail="Driver record missing")
 
     try:
-        # 3. Deduct seat
+        # Deduct seat
         ride.seats_available -= 1
 
-        # 4. WALLET LOGIC
+        # WALLET LOGIC
         total_price = ride.price_per_seat
         driver_share = total_price * 0.75
         
-        # 5. Update Driver's Wallet using driver.id
+        # Update Driver's Wallet using driver.id
         driver_wallet = db.query(Wallet).filter(Wallet.user_id == driver.id).first()
         if not driver_wallet:
             driver_wallet = Wallet(user_id=driver.id, balance=0.0, pending_earnings=0.0, total_revenue=0.0)
@@ -1003,7 +873,7 @@ async def book_ride(ride_id: int, request: BookingRequest, db: Session = Depends
         driver_wallet.pending_earnings += driver_share
         driver_wallet.total_revenue += total_price
 
-        # 6. Log the transaction
+        # Log the transaction
         new_tx = Transaction(
             user_id=driver.id,
             amount=driver_share,
@@ -1012,7 +882,7 @@ async def book_ride(ride_id: int, request: BookingRequest, db: Session = Depends
         )
         db.add(new_tx)
 
-        # 7. Create the Booking entry for the passenger (So it shows in My Bookings)
+        # Create the Booking entry for the passenger (So it shows in My Bookings)
         new_booking = Booking(
             ride_id=ride_id,
             booker_email=request.booker_email.lower().strip(),
@@ -1023,7 +893,6 @@ async def book_ride(ride_id: int, request: BookingRequest, db: Session = Depends
         
         db.commit()
 
-        # SUCCESS: Return with explicit CORS headers to prevent browser blocks
         return JSONResponse(
             content={
                 "status": "success", 
@@ -1079,14 +948,12 @@ async def submit_report(req: ReportRequest, db: Session = Depends(get_db)):
         )
         db.add(new_report)
         
-        # LOGIC: If a user gets more than 5 reports, flag them automatically
         reports_count = db.query(models.Report).filter(
             models.Report.reported_email == req.reported_email
         ).count()
         
         if reports_count >= 5:
             print(f"⚠️ ALERT: User {req.reported_email} has reached high report threshold!")
-            # You could set user.is_verified = False here for safety
 
         db.commit()
         return {"status": "success", "message": "Report submitted for review."}
@@ -1094,7 +961,6 @@ async def submit_report(req: ReportRequest, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail="Reporting failed.")
 
-        
 @app.get("/api/marketplace/download/{item_id}")
 def download_digital_item(item_id: int, user_email: str, db: Session = Depends(get_db)):
     # 1. Fetch the specific purchase record for THIS user
@@ -1102,33 +968,24 @@ def download_digital_item(item_id: int, user_email: str, db: Session = Depends(g
         Purchase.resource_id == item_id,
         Purchase.user_email == user_email.lower().strip()
     ).first()
-    
     if not purchase:
         raise HTTPException(status_code=403, detail="Purchase record not found.")
-
     if purchase.is_downloaded:
         raise HTTPException(status_code=403, detail="File already vaulted.")
-
     # 2. Fetch the resource
     item = db.query(Resource).filter(Resource.id == item_id).first()
     if not item or not item.file_url:
         raise HTTPException(status_code=404, detail="File details not found")
-
     # 3. FIX PATH: Ensure the path is absolute for Windows/Linux consistency
     relative_path = item.file_url.lstrip("/") 
     file_path = os.path.abspath(relative_path)
-
     if not os.path.exists(file_path):
-        # Fallback check
         file_path = os.path.join(os.getcwd(), relative_path)
-
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Physical file missing on server")
-
     # 4. Mark as downloaded
     purchase.is_downloaded = True
     db.commit()
-
     # 5. Return FileResponse with explicit headers to prevent 0B file
     return FileResponse(
         path=file_path, 
@@ -1226,7 +1083,6 @@ def start_ride(req: StartRideRequest, db: Session = Depends(get_db)):
     db.commit()
     return {"status": "success", "message": "OTP Verified! Passenger boarded."}
 
-
 # --- COMPLETE RIDE ---
 @app.post("/api/rides/complete")
 def complete_ride(req: CompleteRideRequest, db: Session = Depends(get_db)):
@@ -1234,14 +1090,11 @@ def complete_ride(req: CompleteRideRequest, db: Session = Depends(get_db)):
     ride = db.query(Ride).filter(Ride.id == req.ride_id).first()
     if not ride:
         raise HTTPException(status_code=404, detail="Ride not found")
-        
     ride.status = "COMPLETED"
-    
     # Update all active bookings to completed
     bookings = db.query(Booking).filter(Booking.ride_id == req.ride_id).all()
     for b in bookings:
         b.status = "COMPLETED"
-        
     db.commit()
     return {"status": "success", "message": "Ride completed successfully!"}
 
@@ -1249,7 +1102,6 @@ def complete_ride(req: CompleteRideRequest, db: Session = Depends(get_db)):
 def get_my_bookings(email: str, db: Session = Depends(get_db)):
     email_clean = email.lower().strip()
     
-    # Fetch BOTH the ride and the specific booking to get the secret OTP!
     results = db.query(Ride, Booking).join(Booking).filter(Booking.booker_email == email_clean).all()
     
     output = []
@@ -1284,8 +1136,6 @@ def delete_ride(ride_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 # --- MARKETPLACE & HANDOVER LOGIC ---
-
-
 @app.post("/api/marketplace/post")
 async def create_item(
     category: str = Form(...), 
@@ -1369,7 +1219,6 @@ async def create_item(
                 
                 trust_score = 98 if len(matches) > 5 else 65
                 
-                # Reset file pointer for saving
                 await file.seek(0)
             except HTTPException as e:
                 raise e
@@ -1377,7 +1226,6 @@ async def create_item(
                 print(f"AI Trust Scanning Error: {ai_err}")
                 trust_score = 50
 
-        # --- SAVE FILE LOGIC ---
         if category == "Old Papers": 
             target_folder, url_prefix = PAPERS_DIR, "static/old_papers"
         elif category == "Notes": 
@@ -1475,8 +1323,6 @@ async def edit_item(item_id: int, data: dict, db: Session = Depends(get_db)):
     db.commit()
     return {"status": "success", "message": "Item updated successfully"}
 
-
-@app.post("/api/marketplace/review")
 async def post_review(data: ReviewCreate, db: Session = Depends(get_db)):
     try:
         # 1. Create the Review object
@@ -1497,7 +1343,6 @@ async def post_review(data: ReviewCreate, db: Session = Depends(get_db)):
             ratings = [r.rating for r in all_reviews]
             count = len(ratings)
             
-            # Safety Check: Prevent Division by Zero
             if count > 0:
                 item.avg_rating = sum(ratings) / count
                 item.review_count = count
@@ -1519,7 +1364,6 @@ async def post_review(data: ReviewCreate, db: Session = Depends(get_db)):
             
     except Exception as e:
         db.rollback()
-        # Look at your terminal! If it says "column does not exist", run the SQL in Step 1.
         print(f"🔥 DATABASE CRASH DETAIL: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
@@ -1611,7 +1455,6 @@ def get_user_inbox(email: str, db: Session = Depends(get_db)):
 def get_chat(user1: str, user2: str, db: Session = Depends(get_db)):
     u1, u2 = user1.lower().strip(), user2.lower().strip()
     
-    # FIX: Use .ilike() on all email queries to completely ignore case sensitivity
     messages = db.query(Message).filter(
         or_(
             and_(Message.sender_email.ilike(u1), Message.receiver_email.ilike(u2)), 
@@ -1752,7 +1595,7 @@ async def confirm_seat(booking_id: int):
 async def process_ride_payment(ride_id: int, db: Session = Depends(get_db)):
     ride = db.query(Ride).filter(Ride.id == ride_id).first()
     
-    # THE FORMULA
+
     total_paid = ride.price_per_seat
     cb_commission = total_paid * 0.25  # 25% for Campus Buddy
     driver_share = total_paid * 0.75   # 75% for Driver
@@ -1841,10 +1684,6 @@ async def submit_rating(request: RatingRequest, db: Session = Depends(get_db)):
         "seller_points": request.stars * 10,
         "buyer_points": 10
     }
-
-# @app.post("/api/sos/trigger")
-# def trigger_sos(data: dict):
-#     return {"status": "alert_sent"}
 
 @router.post("/api/users/rate")
 async def rate_user(req: RatingRequest, db: Session = Depends(get_db)):
