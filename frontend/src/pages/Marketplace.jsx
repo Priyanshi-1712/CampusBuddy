@@ -5,7 +5,8 @@ import {
     FileText, ShoppingBag, Monitor, Star, Heart,
     ShoppingCart, Trash2, Zap, GraduationCap, Calendar,
     ArrowRight, MessageSquare, User, Share2, ShieldCheck, Clock,
-    Download, Lock, MapPin, Settings, Package, AlertTriangle // Added AlertTriangle for Reporting
+    Download, Lock, MapPin, Settings, Package, AlertTriangle, Pencil,
+    IndianRupee 
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import axios from 'axios';
@@ -18,6 +19,8 @@ import RatingModal from '../components/RatingModal';
 const Marketplace = () => {
     const navigate = useNavigate();
     const [items, setItems] = useState([]);
+    const [editingPriceItem, setEditingPriceItem] = useState(null);
+    const [newPriceValue, setNewPriceValue] = useState("");
     const [loading, setLoading] = useState(true);
     const [selectedItem, setSelectedItem] = useState(null);
     const [activeTab, setActiveTab] = useState("details");
@@ -237,6 +240,27 @@ const Marketplace = () => {
         } catch (error) { toast.error("Delete failed"); }
     };
 
+    const handleQuickPriceEdit = async (item) => {
+        const newPrice = prompt(`Update price for "${item.title}":`, item.price);
+
+        // Check if user cancelled or entered non-numeric value
+        if (newPrice === null || isNaN(newPrice) || newPrice.trim() === "") return;
+
+        try {
+            const res = await axios.put(`${BACKEND_URL}/api/marketplace/edit/${item.id}`, {
+                price: parseFloat(newPrice)
+            });
+
+            if (res.data.status === "success") {
+                toast.success("Price updated successfully! 💰");
+                fetchItems();
+            }
+        } catch (err) {
+            console.error("Price update failed", err);
+            toast.error("Failed to update price.");
+        }
+    };
+
     const handleAddToCart = (arg1, arg2) => {
         const e = (arg1 && arg1.stopPropagation) ? arg1 : null;
         const item = (arg1 && arg1.id) ? arg1 : arg2;
@@ -354,7 +378,17 @@ const Marketplace = () => {
                                     <div className="absolute top-2 right-2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                         {isMyItem ? (
                                             <>
-                                                <button onClick={(e) => { e.stopPropagation(); navigate(`/edit-item/${item.id}`); }} className="w-8 h-8 flex items-center justify-center rounded-full bg-white text-[#05488B] shadow-lg border border-slate-100 hover:bg-[#FFC107] transition-all"><Settings size={14} /></button>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setEditingPriceItem(item);
+                                                        setNewPriceValue(item.price);
+                                                    }}
+                                                    className="w-8 h-8 flex items-center justify-center rounded-full bg-white text-[#05488B] shadow-lg border border-slate-100 hover:bg-[#FFC107] transition-all group"
+                                                >
+                                                    <Pencil size={14} />
+                                                </button>
+
                                                 <button onClick={(e) => handleDeleteItem(e, item.id)} className="w-8 h-8 flex items-center justify-center rounded-full bg-white text-red-500 shadow-lg border border-slate-100 hover:bg-red-500 hover:text-white transition-all"><Trash2 size={14} /></button>
                                             </>
                                         ) : (
@@ -539,12 +573,14 @@ const Marketplace = () => {
                                         <button onClick={() => handleAddToCart(selectedItem)} className={`flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl transition-all border-2 font-black text-xs uppercase tracking-widest ${cartItems.some(i => i.id === selectedItem.id) ? "bg-[#05488B] text-[#FFC107] border-[#05488B]" : "bg-white text-slate-700 border-slate-200 hover:border-[#05488B] hover:text-[#05488B]"}`}>
                                             <ShoppingCart size={18} /> {cartItems.some(i => i.id === selectedItem.id) ? "In Bag" : "Add to Bag"}
                                         </button>
+
                                         <button onClick={() => handleOpenPayment(selectedItem)} className="flex-[1.5] bg-[#FFC107] border-2 border-[#FFC107] hover:bg-[#e0a800] hover:border-[#e0a800] text-[#05488B] py-3.5 rounded-xl font-black text-sm shadow-lg shadow-[#FFC107]/20 transition-all flex items-center justify-center gap-2">
                                             Claim Now <ArrowRight size={18} />
                                         </button>
                                     </>
                                 )}
                             </div>
+
                         </div>
                     </div>
                 </div>
@@ -596,6 +632,64 @@ const Marketplace = () => {
                             <div className="p-6 bg-white border-t-2 border-slate-100">
                                 <div className="flex justify-between items-center mb-6"><span className="text-slate-400 font-bold uppercase tracking-widest text-xs">Total Amount</span><span className="text-2xl font-black text-[#05488B]">₹{calculateTotal()}</span></div>
                                 <button disabled={cartItems.length === 0} onClick={() => handleOpenPayment(cartItems[0])} className="w-full bg-[#05488B] text-[#FFC107] py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl hover:scale-[1.02] transition-all disabled:opacity-50">Checkout Now</button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {editingPriceItem && (
+                    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-white w-full max-w-sm rounded-[2rem] p-8 shadow-2xl border-b-8 border-[#FFC107]"
+                        >
+                            <div className="text-center mb-6">
+                                <div className="w-16 h-16 bg-[#05488B]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <IndianRupee size={30} className="text-[#05488B]" />
+                                </div>
+                                <h2 className="text-xl font-black text-[#05488B] uppercase tracking-tight">Update Price</h2>
+                                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">{editingPriceItem.title}</p>
+                            </div>
+
+                            <div className="relative mb-6">
+                                <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-[#05488B]">₹</span>
+                                <input
+                                    type="number"
+                                    value={newPriceValue}
+                                    onChange={(e) => setNewPriceValue(e.target.value)}
+                                    autoFocus
+                                    className="w-full bg-slate-50 border-2 border-slate-100 p-4 pl-10 rounded-2xl outline-none focus:border-[#05488B] font-black text-xl text-[#05488B] transition-all"
+                                />
+                            </div>
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setEditingPriceItem(null)}
+                                    className="flex-1 py-4 rounded-xl font-black uppercase text-[10px] text-slate-400 hover:bg-slate-50 transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        try {
+                                            await axios.put(`${BACKEND_URL}/api/marketplace/edit/${editingPriceItem.id}`, {
+                                                price: parseFloat(newPriceValue)
+                                            });
+                                            toast.success("Price Updated!");
+                                            setEditingPriceItem(null);
+                                            fetchItems();
+                                        } catch (err) {
+                                            toast.error("Update Failed");
+                                        }
+                                    }}
+                                    className="flex-1 bg-[#05488B] text-white py-4 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg shadow-blue-900/20 active:scale-95 transition-all"
+                                >
+                                    Save Changes
+                                </button>
                             </div>
                         </motion.div>
                     </div>

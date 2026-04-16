@@ -1270,6 +1270,12 @@ async def edit_item(item_id: int, data: dict, db: Session = Depends(get_db)):
     item = db.query(Resource).filter(Resource.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
+
+    if "price" in data:
+        item.price = float(data["price"])
+
+    db.commit()
+    return {"status": "success", "message": "Price updated"}
     
     # Update fields safely
     item.title = data.get("title", item.title)
