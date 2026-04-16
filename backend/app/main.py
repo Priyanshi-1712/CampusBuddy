@@ -1151,6 +1151,33 @@ async def create_item(
     file: Optional[UploadFile] = File(None), 
     db: Session = Depends(get_db)
 ):
+
+    #  FORBIDDEN LIST (Common non-academic spam)
+    forbidden_items = [
+        "slippers", "bedsheet", "pillow", "clothes", "shoes", "makeup", 
+        "food", "kurti", "tshirt", "jeans", "curtain", "blanket"
+    ]
+    # Check Title and Description for spam
+    content_to_check = (title + " " + description).lower()
+    
+    if any(word in content_to_check for word in forbidden_items):
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Academic Restriction: Items like '{title}' are not allowed in this marketplace."
+        )
+    #  CATEGORY-SPECIFIC VALIDATION
+    academic_keywords = {
+        "Books": ["book", "author", "edition", "publication", "paperback"],
+        "Lab Equipments": ["calculator", "drafter", "multimeter", "kit", "apron", "lab"],
+        "Notes": ["unit", "handwritten", "semester", "syllabus", "pdf", "chapter"]
+    }
+
+    if category in academic_keywords:
+        # We check if at least one word makes sense for the category
+        # This is a soft check to ensure the user isn't just typing gibberish
+        if len(title) < 5:
+            raise HTTPException(status_code=400, detail="Please provide a descriptive academic title.")
+            
     # --- AI TRUST VARIABLES ---
     trust_score = 100  # Default trust score
     is_digital = category in ["Notes", "Old Papers"]

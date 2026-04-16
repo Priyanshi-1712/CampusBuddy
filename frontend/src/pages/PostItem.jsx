@@ -54,21 +54,24 @@ const PostItem = () => {
     const currentTheme = getThemeConfig();
     const isDigital = category === "Notes" || category === "Old Papers";
 
-    // const handleFileChange = (e) => {
-    //     const file = e.target.files[0];
-    //     if (!file) return;
+    // --- NEW: ACADEMIC VALIDATION LOGIC ---
+    const validateAcademicItem = (title, currentCategory) => {
+        const spamWords = ["slippers", "bedsheet", "pillow", "fashion", "dress", "shoes", "makeup", "food", "kurti", "tshirt", "jeans"];
+        const lowerTitle = title.toLowerCase();
 
-    //     if (isDigital) {
-    //         const ext = file.name.split('.').pop().toLowerCase();
-    //         if (ext !== 'pdf' && ext !== 'docx') {
-    //             toast.error("Format Denied! Please upload only PDF or DOCX.");
-    //             e.target.value = "";
-    //             return;
-    //         }
-    //     }
-    //     setAttachment(file);
-    //     toast.success(isDigital ? "File verified for AI Scanning" : "Image attached successfully");
-    // };
+        // Check for spam
+        if (spamWords.some(word => lowerTitle.includes(word))) {
+            toast.error("❌ This is a Student Marketplace. Only academic items are allowed.");
+            return false;
+        }
+
+        // Category Logic Warning
+        if (currentCategory === "Notes" && !lowerTitle.includes("notes") && !lowerTitle.includes("unit")) {
+            toast.info("Tip: Include 'Notes' or 'Unit No' in your title for better visibility.");
+        }
+
+        return true;
+    };
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];
@@ -116,6 +119,10 @@ const PostItem = () => {
 
     const handlePost = async (e) => {
         e.preventDefault();
+
+        // --- INTEGRATED VALIDATION ---
+        if (!validateAcademicItem(formData.title, category)) return;
+
         const userEmail = localStorage.getItem("userEmail");
         if (!userEmail) return toast.error("Please login first");
 
@@ -304,7 +311,7 @@ const PostItem = () => {
                                         value={formData.price}
                                         onChange={handlePriceChange}
                                         placeholder="0.00"
-                                        className="market-input-lg !pl-20 text-2xl font-black" // Fixed overlap with !pl-20
+                                        className="market-input-lg !pl-20 text-2xl font-black"
                                         required={!isFree}
                                     />
                                 </div>
