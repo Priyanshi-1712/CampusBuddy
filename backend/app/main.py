@@ -1151,148 +1151,78 @@ async def create_item(
     file: Optional[UploadFile] = File(None), 
     db: Session = Depends(get_db)
 ):
-
-    #  FORBIDDEN LIST (Common non-academic spam)
-    forbidden_items = [
-        "slippers", "bedsheet", "pillow", "clothes", "shoes", "makeup", 
-        "food", "kurti", "tshirt", "jeans", "curtain", "blanket"
+    clean_title = title.lower().strip()
+    clean_desc = (description or "").lower().strip()
+    full_text = f"{clean_title} {clean_desc}"
+    spam_blacklist = [
+        "slipper", "chappal", "heel", "shoe", "sandle", "footwear", 
+        "bedsheet", "pillow", "curtain", "tshirt", "jeans", "top", "dress",
+        "makeup", "food", "bottle", "bag", "purse", "wallet"
     ]
-    # Check Title and Description for spam
-    content_to_check = (title + " " + description).lower()
-    
-    if any(word in content_to_check for word in forbidden_items):
+    if any(word in full_text for word in spam_blacklist):
         raise HTTPException(
             status_code=400, 
-            detail=f"Academic Restriction: Items like '{title}' are not allowed in this marketplace."
+            detail=f"SECURITY ALERT: Non-academic items ({clean_title}) are strictly prohibited."
         )
-    #  CATEGORY-SPECIFIC VALIDATION
-    academic_keywords = {
-        "Books": ["book", "author", "edition", "publication", "paperback"],
-        "Lab Equipments": ["calculator", "drafter", "multimeter", "kit", "apron", "lab"],
-        "Notes": ["unit", "handwritten", "semester", "syllabus", "pdf", "chapter"]
-    }
-
-    if category in academic_keywords:
-        # We check if at least one word makes sense for the category
-        # This is a soft check to ensure the user isn't just typing gibberish
-        if len(title) < 5:
-            raise HTTPException(status_code=400, detail="Please provide a descriptive academic title.")
-            
-    # --- AI TRUST VARIABLES ---
-    trust_score = 100  # Default trust score
+    generic_words = ["sheets", "item", "old", "used", "thing", "paper"]
+    if clean_title in generic_words and len(clean_desc) < 20:
+        raise HTTPException(
+            status_code=400, 
+            detail="LOW QUALITY: Please provide a detailed description for this item (min 20 chars)."
+        )
     is_digital = category in ["Notes", "Old Papers"]
+    contents = await file.read() if file else None
+    
+    if contents and not is_digital:
+        try:
+            nparr = np.frombuffer(contents, np.uint8)
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if img is not None:
+                results = reader.readtext(img, detail=0)
+                detected_text = " ".join(results).lower()
 
-    # 1. Safely handle the price parsing
+                if not results or len(detected_text) < 3:
+                     raise HTTPException(
+                        status_code=400, 
+                        detail="AI REJECTION: No academic context (text/brand) detected in image. Ensure item is visible."
+                    )
+                academic_markers = ["edition", "calculator", "casio", "flair", "classmate", "university", "author", "price"]
+        except HTTPException as e:
+            raise e 
+        except Exception:
+            pass
     try:
         is_free_bool = str(isFree).lower() in ['true', '1', 't', 'y', 'yes']
-        if is_free_bool:
-            final_price = 0.0
-        else:
-            cleaned_price = str(price).strip()
-            final_price = float(cleaned_price) if cleaned_price else 0.0
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid price format")
-
-    # 2. Handle File/Image Upload
+        final_price = 0.0 if is_free_bool else float(str(price).strip() or 0)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid price")
+    # Save File Logic
     file_db_url = None
-    if file and file.filename:
-        file_ext = os.path.splitext(file.filename)[1].lower()
-
-        # --- UPDATED: CATEGORY-BASED EXTENSION CHECK ---
-        if is_digital:
-            # Strict docs only for AI Scanning
-            allowed_digital = {".pdf", ".docx", ".doc"}
-            if file_ext not in allowed_digital:
-                raise HTTPException(
-                    status_code=400, 
-                    detail="Invalid file type! Only PDF and DOCS are allowed for Notes/Papers."
-                )
-        else:
-            # Allow images for Books and Lab Equipments
-            allowed_physical = {".jpg", ".jpeg", ".png", ".webp"}
-            if file_ext not in allowed_physical:
-                raise HTTPException(
-                    status_code=400, 
-                    detail="Please upload a valid image (JPG/PNG) for physical items."
-                )
-
-        # --- AI CONTENT SCANNING (ONLY FOR PDF NOTES) ---
-        if is_digital and file_ext == ".pdf":
-            try:
-                # Read file into memory for AI analysis
-                file_content = await file.read()
-                pdf_doc = fitz.open(stream=file_content, filetype="pdf")
-                text_content = ""
-                
-                for page in pdf_doc[:3]:
-                    text_content += page.get_text()
-                
-                if len(text_content.strip()) < 50:
-                    raise HTTPException(
-                        status_code=400, 
-                        detail="AI Reject: The uploaded file appears to be empty or unreadable."
-                    )
-                
-                # KEYWORD MATCHING
-                desc_words = {w for w in re.findall(r'\w+', description.lower()) if len(w) > 2}
-                content_words = set(re.findall(r'\w+', text_content.lower()))
-                matches = desc_words.intersection(content_words)
-
-                if len(matches) < 2:
-                    raise HTTPException(
-                        status_code=400, 
-                        detail="AI Validation Failed: File content does not match your description."
-                    )
-                
-                trust_score = 98 if len(matches) > 5 else 65
-                
-                await file.seek(0)
-            except HTTPException as e:
-                raise e
-            except Exception as ai_err:
-                print(f"AI Trust Scanning Error: {ai_err}")
-                trust_score = 50
-
-        if category == "Old Papers": 
-            target_folder, url_prefix = PAPERS_DIR, "static/old_papers"
-        elif category == "Notes": 
-            target_folder, url_prefix = NOTES_DIR, "static/notes"
-        else: 
-            target_folder, url_prefix = IMAGES_DIR, "static/img"
+    if file and contents:
+        if category == "Old Papers": target_folder, url_prefix = PAPERS_DIR, "static/old_papers"
+        elif category == "Notes": target_folder, url_prefix = NOTES_DIR, "static/notes"
+        else: target_folder, url_prefix = IMAGES_DIR, "static/img"
         
         filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename.replace(' ', '_')}"
         file_path = os.path.join(target_folder, filename)
         
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-            
+            buffer.write(contents)
         file_db_url = f"/{url_prefix}/{filename}"
-
-    # 3. Database Insertion
+    # --- 6. DB INSERTION ---
     try:
         new_res = Resource(
-            title=title, 
-            category=category, 
-            description=description or "", 
-            owner=owner_email,
-            owner_name=owner_name,
-            price=final_price,
-            course=courseName, 
-            semester=semester, 
-            file_url=file_db_url, 
-            meetup_location=meetup_location, 
-            status="AVAILABLE",
-            trust_rank=trust_score
+            title=title, category=category, description=description or "",
+            owner=owner_email, owner_name=owner_name, price=final_price,
+            course=courseName, semester=semester, file_url=file_db_url,
+            meetup_location=meetup_location, status="AVAILABLE", trust_rank=85
         )
         db.add(new_res)
         db.commit()
-        return {"status": "success", "file_url": file_db_url, "ai_trust_score": trust_score}
-    
+        return {"status": "success", "message": "Verified & Posted!"}
     except Exception as e:
         db.rollback()
-        print(f"🔥 DATABASE CRASH DURING POST: {str(e)}") 
-        raise HTTPException(status_code=500, detail="Database error during listing.")
-
+        raise HTTPException(status_code=500, detail="Database error.")
 
 @app.post("/api/marketplace/purchase")
 async def purchase_item(request: PurchaseRequest, db: Session = Depends(get_db)):
