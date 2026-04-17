@@ -67,10 +67,11 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://campus-buddycb.vercel.app/",
-        "https://campus-buddycb.vercel.app/",
-        "https://campus-buddycb.vercel.app/",
-        "https://campus-buddycb.vercel.app/",
+        "https://campus-buddycb.vercel.app", 
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:3000",
+        "http://localhost:3001",
     ],
     allow_credentials=True,
     allow_methods=["*"],  # Allows GET, POST, DELETE, OPTIONS, etc.
@@ -838,14 +839,14 @@ async def book_ride(ride_id: int, request: BookingRequest, db: Session = Depends
                 "vehicle_no": ride.license_number # This is your plate number
             }
         },
-        headers={"Access-Control-Allow-Origin": "https://campus-buddycb.vercel.app/"}
+        headers={"Access-Control-Allow-Origin": "https://campus-buddycb.vercel.app"}
     )
     
     if ride.seats_available <= 0:
         return JSONResponse(
             status_code=400, 
             content={"detail": "No seats available"},
-            headers={"Access-Control-Allow-Origin": "https://campus-buddycb.vercel.app/"}
+            headers={"Access-Control-Allow-Origin": "https://campus-buddycb.vercel.app"}
         )
     # We use ride.owner (which is an email) to get the driver's numeric ID
     driver = db.query(User).filter(User.college_email == ride.owner).first()
@@ -896,7 +897,7 @@ async def book_ride(ride_id: int, request: BookingRequest, db: Session = Depends
                 "status": "success", 
                 "message": f"Seat booked! ₹{driver_share} added to pending earnings."
             },
-            headers={"Access-Control-Allow-Origin": "https://campus-buddycb.vercel.app/"}
+            headers={"Access-Control-Allow-Origin": "https://campus-buddycb.vercel.app"}
         )
 
     except Exception as e:
@@ -905,7 +906,7 @@ async def book_ride(ride_id: int, request: BookingRequest, db: Session = Depends
         return JSONResponse(
             status_code=500,
             content={"detail": "Internal Server Error during booking"},
-            headers={"Access-Control-Allow-Origin": "https://campus-buddycb.vercel.app/"}
+            headers={"Access-Control-Allow-Origin": "https://campus-buddycb.vercel.app"}
         )
 
 @app.options("/api/rides/{ride_id}/book")
@@ -913,7 +914,7 @@ async def options_book_ride(ride_id: int):
     return JSONResponse(
         content="OK",
         headers={
-            "Access-Control-Allow-Origin": "https://campus-buddycb.vercel.app/",
+            "Access-Control-Allow-Origin": "https://campus-buddycb.vercel.app",
             "Access-Control-Allow-Methods": "POST, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type, Authorization",
             "Access-Control-Allow-Credentials": "true",
@@ -1683,8 +1684,8 @@ app.include_router(marketplace_router)
 app.include_router(sos.router, prefix="/api/sos", tags=["Security"])
 app.include_router(router)
 
+app = app
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
-app = app
