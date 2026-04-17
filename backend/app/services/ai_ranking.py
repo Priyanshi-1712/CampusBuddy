@@ -8,8 +8,6 @@ class ResourceRanker:
 
     @staticmethod
     def calculate_score(avg_rating: float, total_reviews: int, uploader_trust: float, upload_date):
-        # 1. Bayesian Average to handle items with very few reviews
-        # This prevents a 5-star item with 1 review from beating a 4.8-star item with 100 reviews
         m = 5  # Minimum reviews required to be considered reliable
         C = 3.5  # The average rating across the whole platform
         weighted_rating = (total_reviews / (total_reviews + m) * avg_rating) + (m / (total_reviews + m) * C)

@@ -66,13 +66,11 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # --- CORS CONFIGURATION ---
 app.add_middleware(
     CORSMiddleware,
-    # This allows your Vite/React frontend to talk to the Python backend
-    # Combined your previous origins with the additional required ones
     allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
+        "https://campus-buddycb.vercel.app/",
+        "https://campus-buddycb.vercel.app/",
+        "https://campus-buddycb.vercel.app/",
+        "https://campus-buddycb.vercel.app/",
     ],
     allow_credentials=True,
     allow_methods=["*"],  # Allows GET, POST, DELETE, OPTIONS, etc.
@@ -840,14 +838,14 @@ async def book_ride(ride_id: int, request: BookingRequest, db: Session = Depends
                 "vehicle_no": ride.license_number # This is your plate number
             }
         },
-        headers={"Access-Control-Allow-Origin": "http://localhost:5173"}
+        headers={"Access-Control-Allow-Origin": "https://campus-buddycb.vercel.app/"}
     )
     
     if ride.seats_available <= 0:
         return JSONResponse(
             status_code=400, 
             content={"detail": "No seats available"},
-            headers={"Access-Control-Allow-Origin": "http://localhost:5173"}
+            headers={"Access-Control-Allow-Origin": "https://campus-buddycb.vercel.app/"}
         )
     # We use ride.owner (which is an email) to get the driver's numeric ID
     driver = db.query(User).filter(User.college_email == ride.owner).first()
@@ -898,7 +896,7 @@ async def book_ride(ride_id: int, request: BookingRequest, db: Session = Depends
                 "status": "success", 
                 "message": f"Seat booked! ₹{driver_share} added to pending earnings."
             },
-            headers={"Access-Control-Allow-Origin": "http://localhost:5173"}
+            headers={"Access-Control-Allow-Origin": "https://campus-buddycb.vercel.app/"}
         )
 
     except Exception as e:
@@ -907,7 +905,7 @@ async def book_ride(ride_id: int, request: BookingRequest, db: Session = Depends
         return JSONResponse(
             status_code=500,
             content={"detail": "Internal Server Error during booking"},
-            headers={"Access-Control-Allow-Origin": "http://localhost:5173"}
+            headers={"Access-Control-Allow-Origin": "https://campus-buddycb.vercel.app/"}
         )
 
 @app.options("/api/rides/{ride_id}/book")
@@ -915,7 +913,7 @@ async def options_book_ride(ride_id: int):
     return JSONResponse(
         content="OK",
         headers={
-            "Access-Control-Allow-Origin": "http://localhost:5173",
+            "Access-Control-Allow-Origin": "https://campus-buddycb.vercel.app/",
             "Access-Control-Allow-Methods": "POST, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type, Authorization",
             "Access-Control-Allow-Credentials": "true",
