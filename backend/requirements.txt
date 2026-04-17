@@ -1,11 +1,11 @@
 # --- Core Framework ---
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
+fastapi
+uvicorn
 opencv-python-headless==4.9.0.80
 numpy==1.26.4   
 
 # --- Database & Models ---
-sqlalchemy==2.0.25
+sqlalchemy
 psycopg2-binary==2.9.9
 pydantic[email]==2.5.3
 alembic==1.13.1
@@ -13,7 +13,7 @@ alembic==1.13.1
 # --- Security & Authentication ---
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
-python-multipart==0.0.9
+python-multipart
 bcrypt==4.1.2
 
 # --- Real-time & Communication ---
@@ -23,8 +23,8 @@ fastapi-mail==1.4.1
 
 # --- AI & Image Processing ---
 easyocr==1.7.1
-torch==2.2.0
-torchvision==0.17.0
+torch==2.2.0+cpu
+torchvision==0.17.0+cpu
 pymupdf==1.23.22
 Pillow==10.2.0
 
