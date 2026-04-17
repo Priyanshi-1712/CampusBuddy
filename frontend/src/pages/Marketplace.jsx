@@ -42,7 +42,7 @@ const Marketplace = () => {
 
     const user = JSON.parse(localStorage.getItem('user')) || { username: 'Guest', email: '' };
     const currentUserEmail = user.email || localStorage.getItem("userEmail");
-    const BACKEND_URL = "http://127.0.0.1:8000";
+    const BACKEND_URL = "https://campus-buddy-05.vercel.app";
 
     const fetchItems = async () => {
         setLoading(true);
