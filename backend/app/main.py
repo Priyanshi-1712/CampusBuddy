@@ -1683,8 +1683,6 @@ app.include_router(marketplace_router)
 app.include_router(sos.router, prefix="/api/sos", tags=["Security"])
 app.include_router(router)
 
-app = app
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
