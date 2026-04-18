@@ -1149,52 +1149,62 @@ async def create_item(
     file: Optional[UploadFile] = File(None), 
     db: Session = Depends(get_db)
 ):
+    # --- 1. EXISTING SPAM & QUALITY CHECKS ---
     clean_title = title.lower().strip()
     clean_desc = (description or "").lower().strip()
     full_text = f"{clean_title} {clean_desc}"
-    spam_blacklist = [
-        "slipper", "chappal", "heel", "shoe", "sandle", "footwear", 
-        "bedsheet", "pillow", "curtain", "tshirt", "jeans", "top", "dress",
-        "makeup", "food", "bottle", "bag", "purse", "wallet"
-    ]
+    spam_blacklist = ["slipper", "chappal", "heel", "shoe", "sandle", "footwear", "bedsheet", "pillow", "curtain", "tshirt", "jeans", "top", "dress", "makeup", "food", "bottle", "bag", "purse", "wallet"]
+    
     if any(word in full_text for word in spam_blacklist):
-        raise HTTPException(
-            status_code=400, 
-            detail=f"SECURITY ALERT: Non-academic items ({clean_title}) are strictly prohibited."
-        )
+        raise HTTPException(status_code=400, detail=f"SECURITY ALERT: Non-academic items ({clean_title}) are strictly prohibited.")
+        
     generic_words = ["sheets", "item", "old", "used", "thing", "paper"]
     if clean_title in generic_words and len(clean_desc) < 20:
-        raise HTTPException(
-            status_code=400, 
-            detail="LOW QUALITY: Please provide a detailed description for this item (min 20 chars)."
-        )
+        raise HTTPException(status_code=400, detail="LOW QUALITY: Please provide a detailed description for this item (min 20 chars).")
+
     is_digital = category in ["Notes", "Old Papers"]
     contents = await file.read() if file else None
     
-    if contents and not is_digital:
-        try:
+    # --- 2. INTEGRATED ACADEMIC VALIDATION ---
+    if contents:
+        academic_markers = ["edition", "calculator", "university", "author", "notes", "semester", "syllabus", "physics", "chemistry", "mathematics", "computer", "engineering"]
+        extracted_text = ""
+
+        # Logic for Digital Items (Notes/Papers) - Supports PDF & Image
+        if is_digital:
+            if file.filename.lower().endswith(".pdf"):
+                try:
+                    doc = fitz.open(stream=contents, filetype="pdf")
+                    extracted_text = " ".join([page.get_text() for page in doc[:2]]) # Read first 2 pages
+                except:
+                    raise HTTPException(status_code=400, detail="Could not read PDF content.")
+            else: # Image-based notes
+                nparr = np.frombuffer(contents, np.uint8)
+                img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                if img is not None:
+                    results = reader.readtext(img, detail=0)
+                    extracted_text = " ".join(results).lower()
+
+            if not any(marker in extracted_text.lower() for marker in academic_markers):
+                raise HTTPException(status_code=400, detail="AI REJECTION: This file does not contain valid academic content.")
+
+        # Logic for Physical Items (Non-Digital) - Your Original OCR Logic
+        else:
             nparr = np.frombuffer(contents, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             if img is not None:
                 results = reader.readtext(img, detail=0)
                 detected_text = " ".join(results).lower()
-
                 if not results or len(detected_text) < 3:
-                     raise HTTPException(
-                        status_code=400, 
-                        detail="AI REJECTION: No academic context (text/brand) detected in image. Ensure item is visible."
-                    )
-                academic_markers = ["edition", "calculator", "casio", "flair", "classmate", "university", "author", "price"]
-        except HTTPException as e:
-            raise e 
-        except Exception:
-            pass
+                     raise HTTPException(status_code=400, detail="AI REJECTION: No academic context detected in image.")
+
+    # --- 3. SAVE FILE & DB INSERTION (Kept same as original) ---
     try:
         is_free_bool = str(isFree).lower() in ['true', '1', 't', 'y', 'yes']
         final_price = 0.0 if is_free_bool else float(str(price).strip() or 0)
     except:
         raise HTTPException(status_code=400, detail="Invalid price")
-    # Save File Logic
+
     file_db_url = None
     if file and contents:
         if category == "Old Papers": target_folder, url_prefix = PAPERS_DIR, "static/old_papers"
@@ -1207,7 +1217,7 @@ async def create_item(
         with open(file_path, "wb") as buffer:
             buffer.write(contents)
         file_db_url = f"/{url_prefix}/{filename}"
-    # --- 6. DB INSERTION ---
+
     try:
         new_res = Resource(
             title=title, category=category, description=description or "",
