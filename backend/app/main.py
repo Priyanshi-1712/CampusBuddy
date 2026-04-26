@@ -1136,24 +1136,50 @@ def delete_ride(ride_id: int, db: Session = Depends(get_db)):
 # --- MARKETPLACE & HANDOVER LOGIC ---
 @app.post("/api/marketplace/post")
 async def create_item(
-    category: str = Form(...),
-    title: str = Form(...),
+    category: str = Form(...), 
+    title: str = Form(...), 
     description: Optional[str] = Form(None),
-    courseName: str = Form(...),
-    semester: str = Form(...),
+    courseName: str = Form(...), 
+    semester: str = Form(...), 
     owner_email: str = Form(...),
-    owner_name: str = Form("Campus Student"),
-    isFree: str = Form(...),
-    price: str = Form("0"),
-    meetup_location: str = Form(...),
-    file: Optional[UploadFile] = File(None),
+    owner_name: str = Form("Campus Student"), 
+    isFree: str = Form(...), 
+    price: str = Form("0"),  
+    meetup_location: str = Form(...), 
+    file: Optional[UploadFile] = File(None), 
     db: Session = Depends(get_db)
 ):
+    # --- 1. GLOBAL SECURITY & QUALITY CHECKS (ADDED) ---
+    clean_title = title.lower().strip()
+    clean_desc = (description or "").lower().strip()
+    full_text = f"{clean_title} {clean_desc}"
+    
+    spam_blacklist = [
+        "slipper", "chappal", "heel", "shoe", "sandle", "footwear", 
+        "bedsheet", "pillow", "curtain", "tshirt", "jeans", "top", "dress",
+        "makeup", "food", "bottle", "bag", "purse", "wallet"
+    ]
+    
+    # Check if any blacklisted item is in the title or description
+    if any(word in full_text for word in spam_blacklist):
+        raise HTTPException(
+            status_code=400, 
+            detail=f"SECURITY ALERT: Non-academic items are strictly prohibited on CampusBuddy."
+        )
+
+    # Prevent "low quality" lazy posts
+    generic_words = ["sheets", "item", "old", "used", "thing", "paper"]
+    if clean_title in generic_words and len(clean_desc) < 20:
+        raise HTTPException(
+            status_code=400, 
+            detail="LOW QUALITY: Please provide a detailed description (min 20 chars) so students know what you are selling."
+        )
+
     # --- AI TRUST VARIABLES ---
-    trust_score = 100# Default trust score
+    trust_score = 100 
     is_digital = category in ["Notes", "Old Papers"]
 
-     # 1. Safely handle the price parsing
+    # 1. Safely handle the price parsing
     try:
         is_free_bool = str(isFree).lower() in ['true', '1', 't', 'y', 'yes']
         if is_free_bool:
@@ -1169,54 +1195,35 @@ async def create_item(
     if file and file.filename:
         file_ext = os.path.splitext(file.filename)[1].lower()
 
-        # --- UPDATED: CATEGORY-BASED EXTENSION CHECK ---
         if is_digital:
-            # Strict docs only for AI Scanning
             allowed_digital = {".pdf", ".docx", ".doc"}
             if file_ext not in allowed_digital:
-                raise HTTPException(
-                status_code=400,
-                detail="Invalid file type! Only PDF and DOCS are allowed for Notes/Papers."
-)
+                raise HTTPException(status_code=400, detail="Invalid file type! Only PDF/DOCS allowed for Notes/Papers.")
         else:
-            # Allow images for Books and Lab Equipments
             allowed_physical = {".jpg", ".jpeg", ".png", ".webp"}
             if file_ext not in allowed_physical:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Please upload a valid image (JPG/PNG) for physical items."
-)
+                raise HTTPException(status_code=400, detail="Please upload a valid image (JPG/PNG) for physical items.")
+        
         # --- AI CONTENT SCANNING (ONLY FOR PDF NOTES) ---
         if is_digital and file_ext == ".pdf":
             try:
-                # Read file into memory for AI analysis
                 file_content = await file.read()
                 pdf_doc = fitz.open(stream=file_content, filetype="pdf")
                 text_content = ""
-
                 for page in pdf_doc[:3]:
                     text_content += page.get_text()
 
                 if len(text_content.strip()) < 50:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="AI Reject: The uploaded file appears to be empty or unreadable."
-)
+                    raise HTTPException(status_code=400, detail="AI Reject: The uploaded file appears to be empty or unreadable.")
 
-                # KEYWORD MATCHING
                 desc_words = {w for w in re.findall(r'\w+', description.lower()) if len(w) > 2}
                 content_words = set(re.findall(r'\w+', text_content.lower()))
                 matches = desc_words.intersection(content_words)
 
                 if len(matches) < 2:
-                    raise HTTPException(
-                    status_code=400,
-                    detail="AI Validation Failed: File content does not match your description."
-                    )
+                    raise HTTPException(status_code=400, detail="AI Validation Failed: File content does not match your description.")
 
                 trust_score = 98 if len(matches) > 5 else 65
-
-                 # Reset file pointer for saving
                 await file.seek(0)
             except HTTPException as e:
                 raise e
@@ -1225,12 +1232,9 @@ async def create_item(
                 trust_score = 50
 
         # --- SAVE FILE LOGIC ---
-        if category == "Old Papers":
-            target_folder, url_prefix = PAPERS_DIR, "static/old_papers"
-        elif category == "Notes":
-            target_folder, url_prefix = NOTES_DIR, "static/notes"
-        else:
-            target_folder, url_prefix = IMAGES_DIR, "static/img"
+        if category == "Old Papers": target_folder, url_prefix = PAPERS_DIR, "static/old_papers"
+        elif category == "Notes": target_folder, url_prefix = NOTES_DIR, "static/notes"
+        else: target_folder, url_prefix = IMAGES_DIR, "static/img"
 
         filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename.replace(' ', '_')}"
         file_path = os.path.join(target_folder, filename)
@@ -1243,18 +1247,10 @@ async def create_item(
     # 3. Database Insertion
     try:
         new_res = Resource(
-            title=title,
-            category=category,
-            description=description or "",
-            owner=owner_email,
-            owner_name=owner_name,
-            price=final_price,
-            course=courseName,
-            semester=semester,
-            file_url=file_db_url,
-            meetup_location=meetup_location,
-            status="AVAILABLE",
-            trust_rank=trust_score
+            title=title, category=category, description=description or "",
+            owner=owner_email, owner_name=owner_name, price=final_price,
+            course=courseName, semester=semester, file_url=file_db_url,
+            meetup_location=meetup_location, status="AVAILABLE", trust_rank=trust_score
         )
         db.add(new_res)
         db.commit()
