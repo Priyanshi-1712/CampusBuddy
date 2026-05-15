@@ -1157,7 +1157,11 @@ async def create_item(
     spam_blacklist = [
         "slipper", "chappal", "heel", "shoe", "sandle", "footwear", 
         "bedsheet", "pillow", "curtain", "tshirt", "jeans", "top", "dress",
-        "makeup", "food", "bottle", "bag", "purse", "wallet"
+        "makeup", "food", "bottle", "bag", "purse", "wallet","gum","cigarette",
+        "vape", "perfume", "deodorant", "toy", "game", "console", "headphone",
+        "speaker", "charger", "cable", "adapter", "phone", "laptop", "tablet", 
+        "camera", "watch", "jewelry", "accessory", "furniture", "decor",
+        "kitchen", "appliance", "tool", "vehicle", "bike", "car", "scooter", "bus", "train"
     ]
     
     # Check if any blacklisted item is in the title or description
