@@ -434,14 +434,13 @@ async def redeem_to_bank(req: RedeemRequest, db: Session = Depends(get_db)):
 
 @router.post("/api/auth/signup-otp")
 async def signup_otp(payload: dict, db: Session = Depends(get_db)):
-    # --- ENHANCED UNIVERSAL CLEANING & VALIDATION (NEW) ---
     raw_email = payload.get("email", "")
-    # Removes all spaces, converts to lower, and strips hidden whitespace
+
     email = "".join(raw_email.split()).lower().strip()
     if "@poornima.edu.in" not in email:
         raise HTTPException(status_code=400, detail="Access Denied: Use your official @poornima.edu.in email.")
     
-    # --- NEW ADDITION: STRICT DOMAIN CHECK ---
+    # ---STRICT DOMAIN CHECK ---
     if not email.endswith("@poornima.edu.in"):
         raise HTTPException(status_code=400, detail="Access Denied: Use your official @poornima.edu.in email.")
     
@@ -464,9 +463,6 @@ async def signup_otp(payload: dict, db: Session = Depends(get_db)):
         db.commit()
         
         try:
-            # 1. Removed '#' to uncomment the line
-            # 2. Changed 'send_otp_email' to 'send_email_otp' to match your function name
-            # We use the 'email' variable here to ensure no hidden spaces are sent to SMTP
             email_sent = send_email_otp(email, otp_code, subject_type="verification") 
             
             if not email_sent:
@@ -501,13 +497,6 @@ def send_otp(data: dict, db: Session = Depends(get_db)):
     password = data.get("password")
     
     user = db.query(User).filter(User.college_email == email).first()
-# def send_otp(data: dict, db: Session = Depends(get_db)):
-#     password = data.get("password")
-#     raw_email = data.get("email", "") # <--- FIXED TO 'data'
-    # email = "".join(raw_email.split()).lower().strip()
-    # email = data.get("email", "").lower().strip()
-
-    # user = db.query(User).filter(User.college_email == email).first()
     
     if not user or user.hashed_password != password:
         raise HTTPException(status_code=401, detail="Invalid credentials.")
