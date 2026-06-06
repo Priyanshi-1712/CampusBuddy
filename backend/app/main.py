@@ -223,7 +223,7 @@ def send_email_otp(email: str, otp: str, subject_type="verification"):
                     <div style="background: #f8fafc; padding: 15px; text-align: center; border-radius: 8px; margin: 20px 0;">
                         <h1 style="letter-spacing: 8px; color: #05488B; margin: 0;">{otp}</h1>
                     </div>
-                    <p style="font-size: 12px; color: #64748b;">This code expires in 10 minutes. If you didn't request this, please ignore this email.</p>
+                    <p style="font-size: 12px; color: #64748b;">This code expires in 5 minutes. If you didn't request this, please ignore this email.</p>
                     <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;">
                     <p style="font-size: 10px; color: #94a3b8; text-align: center;">© 2026 CampusBuddy — FutureBiits Tech</p>
                 </div>
@@ -281,6 +281,7 @@ async def verify_student_id(
         if len(faces) > 0:
             return {"success": True, "message": "Verified! Face and Identity matched."}
     return {"success": True, "message": "Verified, but no face detected."}
+
 # --- FORGOT PASSWORD: STEP 1 (Send OTP) ---
 @app.post("/api/auth/forgot-password")
 async def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
@@ -297,6 +298,7 @@ async def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_
         raise HTTPException(status_code=500, detail="Failed to send reset email.")
     db.commit()
     return {"status": "success", "message": "Reset code sent to your email."}
+
 # --- FORGOT PASSWORD: STEP 2 (Verify & Reset) ---
 @app.post("/api/auth/reset-password-verify")
 async def reset_password_final(req: ResetPasswordVerify, db: Session = Depends(get_db)):
@@ -313,13 +315,14 @@ async def reset_password_final(req: ResetPasswordVerify, db: Session = Depends(g
     if otp_time:
         if otp_time.tzinfo is None: 
             otp_time = otp_time.replace(tzinfo=timezone.utc)
-        if now > (otp_time + timedelta(minutes=10)):
+        if now > (otp_time + timedelta(minutes=5)):
             raise HTTPException(status_code=400, detail="Reset code has expired.")
     # 3. Update Password
     user.hashed_password = req.new_password 
     user.current_otp = None # Clear OTP after success
     db.commit()
     return {"status": "success", "message": "Password updated successfully!"}
+
 # --- SUBSCRIPTION & NEWSLETTER ---
 @app.post("/api/subscribe")
 async def subscribe_user(data: SubscribeRequest, db: Session = Depends(get_db)):
@@ -331,7 +334,6 @@ async def subscribe_user(data: SubscribeRequest, db: Session = Depends(get_db)):
             db.add(new_sub)
             db.commit()
         else:
-            # If they already exist in DB, we still try to send the mail in case they missed it
             print(f"ℹ️ User {data.email} already in database. Resending welcome mail.")
 
         html_content = f"""
@@ -365,6 +367,7 @@ async def subscribe_user(data: SubscribeRequest, db: Session = Depends(get_db)):
         print(f"❌ MAIL FAILURE: {str(e)}")
         # Returns success because the user is likely already recorded in the DB
         return {"status": "success", "note": "Subscribed to DB only"}
+
 # --- AUTH ROUTES ---
 @app.get("/api/users/me")
 def get_user_profile(email: str, db: Session = Depends(get_db)):
@@ -511,7 +514,6 @@ def send_otp(data: dict, db: Session = Depends(get_db)):
          
     db.commit()
     return {"message": "OTP Sent"}
-
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -662,10 +664,12 @@ async def run_9pm_settlement():
         "status": "success",
         "message": "ID Verified Successfully ✅"
     }
+
 #Trigger it on startup
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(run_9pm_settlement())
+    
 @app.post("/api/auth/signup-otp")
 async def signup_otp(payload: dict, db: Session = Depends(get_db)):
     # 1. Clean Email
@@ -693,6 +697,7 @@ async def signup_otp(payload: dict, db: Session = Depends(get_db)):
         print(f"⚠️ MAIL BLOCKED: USE CODE {otp_code}")
         return {"status": "partial_success", "debug_otp": otp_code}
     return {"status": "success", "message": "OTP Sent"}
+
 @router.post("/api/auth/verify-otp")
 def verify_otp(data: dict, db: Session = Depends(get_db)):
     email = data.get("email", "").lower().strip()
