@@ -16,12 +16,3 @@ CampusBuddy is an all-in-one platform designed exclusively for **Poornima Univer
 - **Database:** PostgreSQL (Supabase)
 - **Auth:** JWT (JSON Web Tokens) & SMTP for OTP verification
 
-## 🚀 Getting Started
-
-### 1. Backend Setup
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
